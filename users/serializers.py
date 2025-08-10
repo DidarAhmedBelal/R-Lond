@@ -1,8 +1,14 @@
 from rest_framework import serializers
-from users.models import User
+from users.models import User, SellerApplication
 from django.utils import timezone
 from datetime import timedelta
+from users.enums import SellerApplicationStatus
+import random, string
 
+
+# --------------------------
+# USER SERIALIZERS
+# --------------------------
 
 class UserSerializer(serializers.ModelSerializer):
     profile_image = serializers.ImageField(allow_null=True, required=False)
@@ -27,10 +33,11 @@ class UserSerializer(serializers.ModelSerializer):
 class UserSignupSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(write_only=True)
     agree_to_terms = serializers.BooleanField(write_only=True)
+    role = serializers.CharField(write_only=True, required=False, default='customer')
 
     class Meta:
         model = User
-        fields = ['email', 'password', 'full_name', 'agree_to_terms']
+        fields = ['email', 'password', 'full_name', 'agree_to_terms', 'role']
         extra_kwargs = {
             'password': {'write_only': True},
         }
@@ -41,7 +48,7 @@ class UserSignupSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        role = validated_data.pop('role', 'customer') 
+        role = validated_data.pop('role', 'customer')
         full_name = validated_data.pop('full_name')
         first_name, *last_name = full_name.split(' ', 1)
         last_name = last_name[0] if last_name else ''
@@ -80,7 +87,9 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
         read_only_fields = ['email', 'role']
 
 
-
+# --------------------------
+# PASSWORD RESET SERIALIZERS
+# --------------------------
 
 class ForgotPasswordRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
@@ -94,6 +103,8 @@ class ForgotPasswordRequestSerializer(serializers.Serializer):
         email = self.validated_data['email']
         user = User.objects.get(email=email)
         otp = user.generate_otp()
+        # You might send OTP via email/SMS here
+        return otp
 
 
 class ForgotPasswordConfirmSerializer(serializers.Serializer):
@@ -122,3 +133,56 @@ class ForgotPasswordConfirmSerializer(serializers.Serializer):
         user.otp_created_at = None
         user.save()
         return user
+
+
+# --------------------------
+# SELLER APPLICATION SERIALIZERS
+# --------------------------
+
+class SellerApplicationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SellerApplication
+        exclude = ['verification_code', 'created_at', 'updated_at', 'first_name', 'last_name', 'owner_images']
+        read_only_fields = ['status', 'user']
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+
+
+class SellerApplicationAdminUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SellerApplication
+        fields = ['status']
+
+    def validate_status(self, value):
+        allowed_statuses = [
+            SellerApplicationStatus.APPROVED.value,
+            SellerApplicationStatus.REJECTED.value,
+        ]
+        if value not in allowed_statuses:
+            raise serializers.ValidationError(
+                f"Status must be one of: {', '.join(allowed_statuses)}"
+            )
+        return value
+
+    def update(self, instance, validated_data):
+        old_status = instance.status
+        new_status = validated_data['status']
+
+        if old_status == new_status:
+            raise serializers.ValidationError("Status is already set to this value.")
+
+        # Generate verification code if approved
+        if new_status == SellerApplicationStatus.APPROVED.value:
+            instance.verification_code = ''.join(
+                random.choices(string.ascii_uppercase + string.digits, k=6)
+            )
+            # Also change user role to vendor
+            instance.user.role = "vendor"
+            instance.user.save()
+
+        instance.status = new_status
+        instance.updated_at = timezone.now()
+        instance.save()
+        return instance
