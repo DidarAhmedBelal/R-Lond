@@ -110,3 +110,5 @@ class Wishlist(models.Model):
 
     def __str__(self):
         return f"{self.product.title} in {self.user.email}'s wishlist"
+
+
