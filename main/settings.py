@@ -34,6 +34,11 @@ AUTH_USER_MODEL = 'users.User'
 
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in config('CORS_ALLOWED_ORIGINS', default='').split(',') if origin.strip()]
 
+# Stripe Keys
+STRIPE_WEBHOOK_SECRET = config("STRIPE_WEBHOOK_SECRET")
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
+STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY')
+
 
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
@@ -53,6 +58,8 @@ INSTALLED_APPS = [
     'django_filters',
     'users',
     'products',
+    'common',
+    'payments',
 ]
 
 

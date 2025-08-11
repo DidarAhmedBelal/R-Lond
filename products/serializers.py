@@ -1,134 +1,104 @@
+# serializers.py
 from rest_framework import serializers
-from .models import Category, Product, ProductImage, Review, CartItem, Wishlist
-from django.utils.text import slugify
-import uuid
-
-
-class CategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Category
-        fields = ['id', 'name', 'slug']
-
-    def validate(self, attrs):
-        name = attrs.get('name')
-        slug = attrs.get('slug')
-
-        qs = Category.objects.all()
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-
-        if name and qs.filter(name__iexact=name).exists():
-            raise serializers.ValidationError({"name": "Category with this name already exists."})
-
-        if slug and qs.filter(slug__iexact=slug).exists():
-            raise serializers.ValidationError({"slug": "Category with this slug already exists."})
-
-        return attrs
+from decimal import Decimal
+from products.models import Product, ProductImage
+from common.models import Category, Tag, SEO
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField()
-
     class Meta:
         model = ProductImage
-        fields = ['id', 'image']
+        fields = [
+            'id', 'image', 'alt_text', 'is_primary',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
-
-class ReviewSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField(read_only=True)
-
-    class Meta:
-        model = Review
-        fields = ['id', 'user', 'rating', 'comment', 'created_at']
+    def validate(self, attrs):
+        product = attrs.get("product") or getattr(self.instance, "product", None)
+        if attrs.get("is_primary") and product:
+            if ProductImage.objects.filter(product=product, is_primary=True)\
+                    .exclude(pk=getattr(self.instance, "pk", None)).exists():
+                raise serializers.ValidationError({
+                    "is_primary": "This product already has a primary image."
+                })
+        return attrs
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    vendor = serializers.StringRelatedField(read_only=True)
-
-    # Expecting categories by PK only (existing categories)
+    vendor = serializers.HiddenField(default=serializers.CurrentUserDefault())
     categories = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=Category.objects.all()
+        many=True, queryset=Category.objects.all(), required=False
+    )
+    tags = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Tag.objects.all(), required=False
+    )
+    seo = serializers.PrimaryKeyRelatedField(
+        queryset=SEO.objects.all(), required=False, allow_null=True
     )
 
-    images = ProductImageSerializer(many=True, required=False)
-    reviews = ReviewSerializer(many=True, read_only=True)
-    rating_info = serializers.SerializerMethodField()
+    images = ProductImageSerializer(many=True, read_only=True)
+
+    # Computed fields
+    active_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    average_rating = serializers.FloatField(read_only=True)
+    available_stock = serializers.IntegerField(read_only=True)
+    slug = serializers.SlugField(read_only=True)
 
     class Meta:
         model = Product
         fields = [
-            'id', 'title', 'slug', 'description', 'price', 'discount_price',
-            'color', 'size', 'status', 'stock_status', 'stock_quantity',
-            'dimensions', 'material', 'weight', 'assembly_required',
-            'warranty', 'care_instructions', 'country_of_origin', 'created_at',
-            'updated_at', 'vendor', 'categories', 'images', 'reviews', 'rating_info'
+            'id', 'vendor', 'categories', 'tags', 'seo',
+            'name', 'slug', 'sku',
+            'short_description', 'full_description',
+            'price1', 'price2', 'price3',
+            'option1', 'option2', 'option3', 'option4',
+            'is_stock', 'stock_quantity',
+            'home_delivery', 'pickup', 'partner_delivery', 'estimated_delivery_days',
+            'status', 'featured', 'is_active',
+            'active_price', 'average_rating', 'available_stock',
+            'images',
+            'created_at', 'updated_at', 'is_approve'
         ]
-        read_only_fields = ['created_at', 'updated_at', 'vendor']
+        read_only_fields = [
+            'id', 'vendor', 'slug', 'status', 'featured',
+            'active_price', 'average_rating', 'available_stock',
+            'created_at', 'updated_at', 'is_active', 'is_approve'
+        ]
 
-    def get_rating_info(self, obj):
-        return obj.calculate_rating_info()
 
-    def validate_slug(self, value):
-        if not value:
-            # Auto-generate slug if not provided
-            value = slugify(self.initial_data.get('title', '')) + '-' + uuid.uuid4().hex[:8]
-        qs = Product.objects.filter(slug=value)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError("Product with this slug already exists.")
-        return value
+    def validate(self, attrs):
+        price_fields = [attrs.get("price1"), attrs.get("price2"), attrs.get("price3")]
+        if not any(p is not None for p in price_fields):
+            raise serializers.ValidationError({"price1": "At least one price must be set."})
+
+        if attrs.get("is_stock", True) and attrs.get("stock_quantity", 0) < 0:
+            raise serializers.ValidationError({"stock_quantity": "Stock quantity cannot be negative."})
+
+        delivery_fields = ["home_delivery", "partner_delivery", "pickup"]
+        if any(attrs.get(f) for f in delivery_fields) and attrs.get("estimated_delivery_days") is None:
+            raise serializers.ValidationError({
+                "estimated_delivery_days": "Must set estimated delivery days when delivery/pickup is enabled."
+            })
+
+        return attrs
 
     def create(self, validated_data):
-        categories = validated_data.pop('categories', [])
-        images_data = validated_data.pop('images', [])
-
-        # Auto generate slug if missing
-        if not validated_data.get('slug'):
-            validated_data['slug'] = slugify(validated_data.get('title', '')) + '-' + uuid.uuid4().hex[:8]
-
-        product = Product.objects.create(**validated_data)
-        product.categories.set(categories)
-
-        for img_data in images_data:
-            # img_data must contain 'image' file
-            ProductImage.objects.create(product=product, **img_data)
-
+        categories = validated_data.pop("categories", [])
+        tags = validated_data.pop("tags", [])
+        product = super().create(validated_data)
+        if categories:
+            product.categories.set(categories)
+        if tags:
+            product.tags.set(tags)
         return product
 
     def update(self, instance, validated_data):
-        categories = validated_data.pop('categories', None)
-        images_data = validated_data.pop('images', None)
-
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-
+        categories = validated_data.pop("categories", None)
+        tags = validated_data.pop("tags", None)
+        product = super().update(instance, validated_data)
         if categories is not None:
-            instance.categories.set(categories)
-
-        if images_data is not None:
-            instance.images.all().delete()
-            for img_data in images_data:
-                ProductImage.objects.create(product=instance, **img_data)
-
-        return instance
-
-
-class CartItemSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(read_only=True)
-    user = serializers.StringRelatedField(read_only=True)
-
-    class Meta:
-        model = CartItem
-        fields = ['id', 'product', 'quantity', 'added_at', 'user']
-
-
-class WishlistSerializer(serializers.ModelSerializer):
-    product = ProductSerializer(read_only=True)
-    user = serializers.StringRelatedField(read_only=True)
-
-    class Meta:
-        model = Wishlist
-        fields = ['id', 'product', 'added_at', 'user']
+            product.categories.set(categories)
+        if tags is not None:
+            product.tags.set(tags)
+        return product

@@ -29,11 +29,10 @@ class UserSerializer(serializers.ModelSerializer):
             'date_of_birth', 'national_id', 'role'
         ]
 
-
 class UserSignupSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(write_only=True)
     agree_to_terms = serializers.BooleanField(write_only=True)
-    role = serializers.CharField(write_only=True, required=False, default='customer')
+    role = serializers.CharField(read_only=True, default='customer')  
 
     class Meta:
         model = User
@@ -48,7 +47,6 @@ class UserSignupSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        role = validated_data.pop('role', 'customer')
         full_name = validated_data.pop('full_name')
         first_name, *last_name = full_name.split(' ', 1)
         last_name = last_name[0] if last_name else ''
@@ -58,7 +56,7 @@ class UserSignupSerializer(serializers.ModelSerializer):
             email=validated_data['email'],
             first_name=first_name,
             last_name=last_name,
-            role=role
+            role='customer' 
         )
         user.set_password(password)
         user.save()
@@ -85,6 +83,33 @@ class UserProfileUpdateSerializer(serializers.ModelSerializer):
             'address', 'gender', 'date_of_birth', 'national_id'
         ]
         read_only_fields = ['email', 'role']
+
+
+# --------------------------
+# USER PUBLIC SERIALIZER
+# --------------------------
+
+class UserPublicSerializer(serializers.ModelSerializer):
+    profile_image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id',
+            'first_name',
+            'last_name',
+            'profile_image_url',
+            'role',
+        ]
+
+        read_only_field = ['role']
+
+    def get_profile_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.profile_image and hasattr(obj.profile_image, 'url'):
+            return request.build_absolute_uri(obj.profile_image.url) if request else obj.profile_image.url
+        return None
+
 
 
 # --------------------------
@@ -142,7 +167,7 @@ class ForgotPasswordConfirmSerializer(serializers.Serializer):
 class SellerApplicationSerializer(serializers.ModelSerializer):
     class Meta:
         model = SellerApplication
-        exclude = ['verification_code', 'created_at', 'updated_at', 'first_name', 'last_name', 'owner_images']
+        exclude = ['verification_code', 'created_at', 'updated_at', 'first_name', 'last_name', 'owner_images', 'email']
         read_only_fields = ['status', 'user']
 
     def create(self, validated_data):
