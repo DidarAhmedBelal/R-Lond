@@ -23,11 +23,14 @@ from common.views import (
     SEOViewSet,
     SavedProductViewSet,
     ReviewViewSet,
-    CartItemViewSet,
 )
 
 # Payments
 from payments.views import PaymentViewSet, StripeWebhookView
+
+# Orders
+from orders.views import OrderViewSet
+
 
 router = DefaultRouter()
 
@@ -37,7 +40,6 @@ router.register('tags', TagViewSet, basename='tags')
 router.register('seo', SEOViewSet, basename='seo')
 router.register('saved-products', SavedProductViewSet, basename='saved-products')
 router.register('product-reviews', ReviewViewSet, basename='product-reviews')
-router.register('cart-items', CartItemViewSet, basename='cart-items')
 
 # Products routes
 router.register('products', ProductViewSet, basename='products')
@@ -49,6 +51,10 @@ router.register('seller/applications', SellerApplicationViewSet, basename='selle
 # Payments routes
 router.register('payments', PaymentViewSet, basename='payment')
 
+# Orders routes
+router.register('orders', OrderViewSet, basename='order')
+
+
 urlpatterns = [
     # Auth & Profile
     path('login/', UserLoginView.as_view(), name='user-login'),
@@ -59,7 +65,7 @@ urlpatterns = [
     path('forgot-password/request/', ForgotPasswordRequestView.as_view(), name='forgot-password-request'),
     path('forgot-password/confirm/', ForgotPasswordConfirmView.as_view(), name='forgot-password-confirm'),
 
-    # Stripe webhook endpoint (no trailing slash recommended for webhooks)
+    # Stripe webhook endpoint - no trailing slash recommended for Stripe webhooks
     path('stripe/webhook', StripeWebhookView.as_view(), name='stripe-webhook'),
 
     # Include all registered router URLs

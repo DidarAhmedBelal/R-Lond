@@ -92,7 +92,7 @@ class SavedProduct(BaseModel):
 
 class Review(BaseModel):
     product = models.ForeignKey(
-        "products.Product",  # String reference to avoid import
+        "products.Product", 
         on_delete=models.CASCADE,
         related_name="reviews"
     )
@@ -111,30 +111,30 @@ class Review(BaseModel):
         return f"Review by {getattr(self.user, 'email', self.user)} for {self.product.name}"
 
 
-class CartItem(BaseModel):
-    product = models.ForeignKey(
-        "products.Product",  # String reference to avoid import
-        on_delete=models.CASCADE,
-        related_name="cart_items"
-    )
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="cart_items")
-    quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
-    price_snapshot = models.DecimalField(
-        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))]
-    )
+# class CartItem(BaseModel):
+#     product = models.ForeignKey(
+#         "products.Product",  
+#         on_delete=models.CASCADE,
+#         related_name="cart_items"
+#     )
+#     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="cart_items")
+#     quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
+#     price_snapshot = models.DecimalField(
+#         max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))]
+#     )
 
-    class Meta:
-        ordering = ["-updated_at"]
-        indexes = [models.Index(fields=["user"]), models.Index(fields=["product"])]
-        unique_together = ("product", "user")
+#     class Meta:
+#         ordering = ["-updated_at"]
+#         indexes = [models.Index(fields=["user"]), models.Index(fields=["product"])]
+#         unique_together = ("product", "user")
 
-    def __str__(self):
-        return f"{self.quantity} × {self.product.name} for {getattr(self.user, 'email', self.user)}"
+#     def __str__(self):
+#         return f"{self.quantity} × {self.product.name} for {getattr(self.user, 'email', self.user)}"
 
-    @property
-    def subtotal(self):
-        return (self.price_snapshot or Decimal("0.00")) * Decimal(self.quantity)
+#     @property
+#     def subtotal(self):
+#         return (self.price_snapshot or Decimal("0.00")) * Decimal(self.quantity)
 
-    def clean(self):
-        if self.product.is_stock and self.quantity > self.product.stock_quantity:
-            raise ValidationError({"quantity": "Requested quantity exceeds available stock."})
+#     def clean(self):
+#         if self.product.is_stock and self.quantity > self.product.stock_quantity:
+#             raise ValidationError({"quantity": "Requested quantity exceeds available stock."})

@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from decouple import config
 from datetime import timedelta
+from decimal import Decimal
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -43,6 +44,16 @@ STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY')
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 
+DEFAULT_TAX_RATE = 0.05  # 5%
+
+DELIVERY_FEES = {
+    "standard": Decimal("50.00"),
+    "express": Decimal("150.00"),
+    "pickup": Decimal("0.00"),
+}
+FRONTEND_PAYMENT_SUCCESS_URL = config('FRONTEND_PAYMENT_SUCCESS_URL', default=None)
+FRONTEND_PAYMENT_CANCEL_URL = config('FRONTEND_PAYMENT_CANCEL_URL', default=None)
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -60,6 +71,7 @@ INSTALLED_APPS = [
     'products',
     'common',
     'payments',
+    'orders',
 ]
 
 

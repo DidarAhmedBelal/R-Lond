@@ -1,6 +1,6 @@
-# common/serializers.py
+
 from rest_framework import serializers
-from .models import Category, Tag, SEO, SavedProduct, Review, CartItem
+from common.models import Category, Tag, SEO, SavedProduct, Review
 from products.models import Product
 from users.serializers import UserPublicSerializer
 
@@ -131,36 +131,3 @@ class ReviewSerializer(serializers.ModelSerializer):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
-
-# -------------------
-# CartItem
-# -------------------
-class CartItemSerializer(serializers.ModelSerializer):
-    user = UserPublicSerializer(read_only=True)
-    product_name = serializers.CharField(source='product.name', read_only=True)
-    subtotal = serializers.DecimalField(
-        max_digits=12, decimal_places=2, read_only=True
-    )
-
-    class Meta:
-        model = CartItem
-        fields = [
-            'id', 'product', 'product_name', 'user', 'quantity',
-            'price_snapshot', 'subtotal', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'user', 'subtotal', 'created_at', 'updated_at']
-
-    def validate(self, attrs):
-        product = attrs.get('product')
-        quantity = attrs.get('quantity')
-
-        if product.is_stock and quantity > product.stock_quantity:
-            raise serializers.ValidationError({
-                'quantity': 'Requested quantity exceeds available stock.'
-            })
-        return attrs
-
-    def create(self, validated_data):
-        validated_data['user'] = self.context['request'].user
-        validated_data['price_snapshot'] = validated_data['product'].price
-        return super().create(validated_data)

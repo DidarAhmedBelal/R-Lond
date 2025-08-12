@@ -6,10 +6,10 @@ from rest_framework.exceptions import PermissionDenied, ValidationError as DRFVa
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 
-from common.models import Category, Tag, SEO, SavedProduct, Review, CartItem
+from common.models import Category, Tag, SEO, SavedProduct, Review
 from common.serializers import (
     CategorySerializer, TagSerializer, SEOSerializer,
-    SavedProductSerializer, ReviewSerializer, CartItemSerializer
+    SavedProductSerializer, ReviewSerializer
 )
 from products.models import Product 
 from products.enums import ProductStatus
@@ -113,62 +113,6 @@ class SEOViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-# -------------------
-# SavedProduct
-# -------------------
-# class SavedProductViewSet(viewsets.ModelViewSet):
-#     serializer_class = SavedProductSerializer
-#     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
-#     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-#     search_fields = ['name', 'status']
-#     ordering_fields = ['created_at', 'updated_at']
-#     ordering = ['-created_at']
-
-#     def get_queryset(self):
-#         return SavedProduct.objects.filter(vendor=self.request.user)
-
-#     def perform_create(self, serializer):
-#         if getattr(self.request.user, "role", None) != "vendor":
-#             raise PermissionDenied("Only vendors can save products.")
-#         serializer.save(vendor=self.request.user)
-
-#     def create(self, request, *args, **kwargs):
-#         product_id = request.data.get('product_id')
-#         action_type = request.data.get('action', 'save')  # "save" or "submit"
-
-#         if not product_id:
-#             raise DRFValidationError({"product_id": "This field is required."})
-
-#         product = get_object_or_404(Product, pk=product_id)
-
-#         snapshot = {
-#             "id": product.id,
-#             "name": product.name,
-#             "slug": product.slug,
-#             "price": str(product.active_price),
-#             "is_active": product.is_active,
-#             "status": product.status,
-#         }
-
-#         existing = SavedProduct.objects.filter(vendor=request.user, data__id=product.id).first()
-#         if existing:
-#             if action_type == "submit":
-#                 existing.status = "submitted"
-#                 existing.save()
-#             serializer = self.get_serializer(existing)
-#             return Response(serializer.data, status=status.HTTP_200_OK)
-
-#         saved_status = "submitted" if action_type == "submit" else "draft"
-#         obj = SavedProduct.objects.create(
-#             vendor=request.user,
-#             name=product.name,
-#             data=snapshot,
-#             status=saved_status
-#         )
-#         serializer = self.get_serializer(obj)
-#         return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
 
 class SavedProductViewSet(viewsets.ModelViewSet):
     serializer_class = SavedProductSerializer
@@ -223,75 +167,3 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
         serializer.save(user=user)
 
-
-
-# -------------------
-# CartItem
-# -------------------
-class CartItemViewSet(viewsets.ModelViewSet):
-    serializer_class = CartItemSerializer
-    permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['product__name']
-    ordering_fields = ['created_at', 'updated_at']
-    ordering = ['-created_at']
-
-    def get_queryset(self):
-        return CartItem.objects.select_related('product', 'user').filter(user=self.request.user)
-
-    @transaction.atomic
-    def create(self, request, *args, **kwargs):
-        """
-        Expect payload: {"product_id": <int>, "quantity": <int>}
-        If same product in cart -> increment quantity (but check stock).
-        price_snapshot = current active price of product.
-        """
-        product_id = request.data.get('product_id')
-        quantity = int(request.data.get('quantity', 1))
-
-        if not product_id:
-            raise DRFValidationError({"product_id": "This field is required."})
-        if quantity < 1:
-            raise DRFValidationError({"quantity": "Quantity must be >= 1."})
-
-        product = get_object_or_404(Product, pk=product_id)
-
-        # check stock if product uses stock
-        if product.is_stock and quantity > product.stock_quantity:
-            raise DRFValidationError({"quantity": "Requested quantity exceeds available stock."})
-
-        # if item exists, increase quantity (but don't exceed stock)
-        cart_item = CartItem.objects.filter(user=request.user, product=product).first()
-        if cart_item:
-            new_qty = cart_item.quantity + quantity
-            if product.is_stock and new_qty > product.stock_quantity:
-                raise DRFValidationError({"quantity": "Resulting quantity exceeds available stock."})
-            cart_item.quantity = new_qty
-            cart_item.price_snapshot = product.active_price
-            cart_item.save()
-            serializer = self.get_serializer(cart_item)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-
-        # create new cart item
-        cart_item = CartItem.objects.create(
-            user=request.user,
-            product=product,
-            quantity=quantity,
-            price_snapshot=product.active_price
-        )
-        serializer = self.get_serializer(cart_item)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    @action(detail=False, methods=['post'])
-    def checkout(self, request):
-        """
-        Simple checkout endpoint: returns cart items and total.
-        (Integrate real payment gateway here.)
-        """
-        items = self.get_queryset()
-        total = sum((item.price_snapshot * item.quantity) for item in items)
-        serialized = self.get_serializer(items, many=True).data
-        return Response({
-            "items": serialized,
-            "total": str(total)
-        }, status=status.HTTP_200_OK)
