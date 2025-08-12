@@ -1,26 +1,32 @@
+import stripe
+import logging
+from decimal import Decimal
+from datetime import timedelta
+
+from django.conf import settings
+from django.shortcuts import get_object_or_404
+from django.utils.timezone import now
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.http import JsonResponse, HttpResponse
+
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
-from django.conf import settings
-from django.shortcuts import get_object_or_404
-import stripe
-import logging
-from decimal import Decimal
+from rest_framework.exceptions import PermissionDenied
+from django.db.models import Sum, functions
+
 from payments.models import Payment
 from payments.serializers import PaymentSerializer
 from products.models import Product, ProductStatus
 from users.models import User
-from rest_framework.exceptions import PermissionDenied
-from django.db.models import Sum
-from django.utils.timezone import now
-from datetime import timedelta
-from django.db import models
 from orders.enums import OrderStatus
 from orders.models import Order
-from django.http import JsonResponse, HttpResponse
+
+from orders.models import CartItem
+from orders.models import OrderItem
+from django.db import models
 
 logger = logging.getLogger(__name__)
 stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -60,7 +66,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
             return Response({"detail": "Product is not approved."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Create an Order record BEFORE creating the Stripe session so metadata can include order_id
             order = Order.objects.create(
                 customer=user,
                 vendor=product.vendor,
@@ -69,7 +74,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
                 payment_status=OrderStatus.PENDING.value,
             )
 
-            # Build success/cancel URLs
             success_url = getattr(settings, 'FRONTEND_PAYMENT_SUCCESS_URL', None) or request.build_absolute_uri('/payments/success/')
             cancel_url = getattr(settings, 'FRONTEND_PAYMENT_CANCEL_URL', None) or request.build_absolute_uri('/payments/cancel/')
 
@@ -92,7 +96,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
                     "product_id": str(product.id),
                     "customer_id": str(user.id),
                     "vendor_id": str(product.vendor.id),
-                    "order_id": str(order.id),
+                    "order_id": str(order.order_id),  # **Important: use order_id string field**
                     "payment": "true",
                 },
             )
@@ -102,6 +106,87 @@ class PaymentViewSet(viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Stripe checkout session creation failed: {e}", exc_info=True)
             return Response({"detail": "Failed to create checkout session."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+
+
+    @action(detail=False, methods=["post"], permission_classes=[permissions.IsAuthenticated])
+    def create_checkout_session_from_order(self, request):
+        user = request.user
+
+        if getattr(user, "role", None) != "customer":
+            return Response({"detail": "Only customers can purchase products."}, status=status.HTTP_403_FORBIDDEN)
+
+        order_id = request.data.get("order_id")
+        if not order_id:
+            return Response({"detail": "order_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            order = Order.objects.select_related("vendor", "customer") \
+                                 .prefetch_related("items__product") \
+                                 .get(order_id=order_id, customer=user)
+        except Order.DoesNotExist:
+            return Response({"detail": "Order not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if order.items.count() == 0:
+            return Response({"detail": "No items found for this order."}, status=status.HTTP_400_BAD_REQUEST)
+
+        vendor = order.vendor
+        line_items = []
+
+        for item in order.items.all():
+            product = item.product
+            if hasattr(product, 'status') and product.status != ProductStatus.APPROVED.value:
+                return Response(
+                    {"detail": f"Product '{product.name}' is not approved."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            line_items.append({
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {"name": product.name},
+                    "unit_amount": int(Decimal(item.price) * 100),
+                },
+                "quantity": item.quantity,
+            })
+
+        success_url = getattr(settings, 'FRONTEND_PAYMENT_SUCCESS_URL', request.build_absolute_uri('/payments/success/'))
+        cancel_url = getattr(settings, 'FRONTEND_PAYMENT_CANCEL_URL', request.build_absolute_uri('/payments/cancel/'))
+
+        try:
+            session = stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=line_items,
+                mode="payment",
+                customer_email=user.email,
+                success_url=success_url,
+                cancel_url=cancel_url,
+                metadata={
+                    "customer_id": str(user.id),
+                    "vendor_id": str(vendor.id),
+                    "order_id": order.order_id,
+                    "payment": "true",
+                },
+            )
+
+            return Response({
+                "checkout_url": session.url,
+                "order_id": order.order_id,
+                "total_amount": str(order.total_amount),
+                "item_count": order.item_count
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"Stripe checkout session creation from order failed: {e}", exc_info=True)
+            return Response({"detail": "Failed to create checkout session."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+
 
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
     def dashboard_summary(self, request):
@@ -143,6 +228,9 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
         return Response(data, status=status.HTTP_200_OK)
 
+
+
+
     @action(detail=False, methods=["get"], permission_classes=[permissions.IsAuthenticated])
     def payments_graph(self, request):
         user = request.user
@@ -173,8 +261,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
             return Response({"detail": "No payment data available for your role."}, status=status.HTTP_403_FORBIDDEN)
 
         payments_by_month = payments_qs.annotate(
-            year=models.functions.ExtractYear("created_at"),
-            month=models.functions.ExtractMonth("created_at")
+            year=functions.ExtractYear("created_at"),
+            month=functions.ExtractMonth("created_at")
         ).values("year", "month").annotate(total_amount=Sum("amount")).order_by("year", "month")
 
         for entry in payments_by_month:
@@ -190,6 +278,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
         return Response(data, status=status.HTTP_200_OK)
 
 
+
+
 @method_decorator(csrf_exempt, name="dispatch")
 class StripeWebhookView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -201,11 +291,9 @@ class StripeWebhookView(APIView):
 
         try:
             event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
-        except stripe.error.SignatureVerificationError as e:
-            logger.error(f"Stripe webhook signature verification failed: {e}")
+        except stripe.error.SignatureVerificationError:
             return Response({"error": "Invalid signature"}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.error(f"Error parsing Stripe webhook: {e}", exc_info=True)
+        except Exception:
             return Response({"error": "Webhook error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if event["type"] == "checkout.session.completed":
@@ -213,39 +301,33 @@ class StripeWebhookView(APIView):
             metadata = session.get("metadata", {}) or {}
             transaction_id = session.get("id")
 
-            # Prevent duplicate payment
+            # Avoid duplicate payment entries
             if Payment.objects.filter(transaction_id=transaction_id).exists():
-                logger.warning(f"Duplicate payment attempt ignored: {transaction_id}")
                 return Response({"status": "duplicate_ignored"}, status=status.HTTP_200_OK)
 
             try:
-                product = None
-                customer = None
-                vendor = None
-                order = None
+                product = Product.objects.filter(id=metadata.get("product_id")).first() if metadata.get("product_id") else None
+                customer = User.objects.filter(id=metadata.get("customer_id")).first() if metadata.get("customer_id") else None
+                vendor = User.objects.filter(id=metadata.get("vendor_id")).first() if metadata.get("vendor_id") else None
 
-                if metadata.get("product_id"):
-                    product = Product.objects.filter(id=metadata.get("product_id")).first()
-                if metadata.get("customer_id"):
-                    customer = User.objects.filter(id=metadata.get("customer_id")).first()
-                if metadata.get("vendor_id"):
-                    vendor = User.objects.filter(id=metadata.get("vendor_id")).first()
+                # Fetch order using order_id string
+                order = Order.objects.filter(order_id=metadata.get("order_id")).first() if metadata.get("order_id") else None
 
-                order_id = metadata.get("order_id")
-                if order_id:
-                    order = Order.objects.filter(id=order_id).first()
-
+                # Create order if it doesn't exist
                 if not order:
                     order = Order.objects.create(
                         customer=customer,
                         vendor=vendor,
-                        total_amount=(Decimal(session.get("amount_total") or 0) / 100) if session.get("amount_total") else None,
+                        order_id=metadata.get("order_id") or None,
+                        total_amount=(Decimal(session.get("amount_total") or 0) / 100) if session.get("amount_total") else Decimal("0.00"),
                         order_status=OrderStatus.PAID.value,
                         payment_status=OrderStatus.PAID.value,
                     )
 
                 amount = Decimal(session.get("amount_total") or 0) / 100
-                Payment.objects.create(
+
+                payment = Payment.objects.create(
+                    order=order,
                     product=product,
                     customer=customer,
                     vendor=vendor,
@@ -255,23 +337,36 @@ class StripeWebhookView(APIView):
                     status="completed",
                 )
 
-                # Update order status to 'paid'
+                # Update order status
                 order.order_status = OrderStatus.PAID.value
                 order.payment_status = OrderStatus.PAID.value
                 order.save()
 
-                logger.info(f"Payment successful & Order {order.id} marked as PAID")
-                return Response({"status": "payment_success"}, status=status.HTTP_200_OK)
+                return Response({
+                    "status": "payment_success",
+                    "order": {
+                        "order_id": order.order_id,
+                        "total_amount": str(order.total_amount),
+                        "status": order.order_status,
+                        "payment_status": order.payment_status
+                    },
+                    "payment": {
+                        "id": payment.id,
+                        "transaction_id": payment.transaction_id,
+                        "amount": str(payment.amount),
+                        "status": payment.status,
+                        "payment_method": payment.payment_method
+                    }
+                }, status=status.HTTP_200_OK)
 
             except Exception as e:
                 logger.error(f"Error recording payment: {e}", exc_info=True)
-                # Return 200 so Stripe doesn't retry repeatedly
-                return Response({"error": "Payment processing error"}, status=status.HTTP_200_OK)
+                return Response({"error": "Payment processing error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        logger.info(f"Unhandled event type: {event['type']}")
         return Response({"status": "event_not_handled"}, status=status.HTTP_200_OK)
+    
 
-
+    
 class PaymentSuccessView(APIView):
     permission_classes = [permissions.AllowAny]
 

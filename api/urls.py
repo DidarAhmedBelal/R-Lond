@@ -29,30 +29,33 @@ from common.views import (
 from payments.views import PaymentViewSet, StripeWebhookView
 
 # Orders
-from orders.views import OrderViewSet
+from orders.views import OrderViewSet, AddShippingAddressView, CartViewSet, OrderReceiptView
 
 
+# Router config
 router = DefaultRouter()
 
-# Register routes for common apps
-router.register('categories', CategoryViewSet, basename='categories')
-router.register('tags', TagViewSet, basename='tags')
+# Common
+router.register('categories', CategoryViewSet, basename='category')
+router.register('tags', TagViewSet, basename='tag')
 router.register('seo', SEOViewSet, basename='seo')
-router.register('saved-products', SavedProductViewSet, basename='saved-products')
-router.register('product-reviews', ReviewViewSet, basename='product-reviews')
+router.register('saved-products', SavedProductViewSet, basename='saved-product')
+router.register('product-reviews', ReviewViewSet, basename='product-review')
 
-# Products routes
-router.register('products', ProductViewSet, basename='products')
-router.register('product-images', ProductImageViewSet, basename='product-images')
+# Products
+router.register('products', ProductViewSet, basename='product')
+router.register('product-images', ProductImageViewSet, basename='product-image')
 
-# Users routes
+# Users
 router.register('seller/applications', SellerApplicationViewSet, basename='seller-application')
 
-# Payments routes
+# Payments
 router.register('payments', PaymentViewSet, basename='payment')
 
-# Orders routes
+# Orders
 router.register('orders', OrderViewSet, basename='order')
+
+router.register('cart', CartViewSet, basename='cart')
 
 
 urlpatterns = [
@@ -64,10 +67,13 @@ urlpatterns = [
     path('profile/update/', UserProfileUpdateView.as_view(), name='profile-update'),
     path('forgot-password/request/', ForgotPasswordRequestView.as_view(), name='forgot-password-request'),
     path('forgot-password/confirm/', ForgotPasswordConfirmView.as_view(), name='forgot-password-confirm'),
+    path('orders/add-shipping-address/', AddShippingAddressView.as_view(), name='add-shipping-address'),
+    path("receipt/<str:order_id>/", OrderReceiptView.as_view(), name="order-receipt"),
 
-    # Stripe webhook endpoint - no trailing slash recommended for Stripe webhooks
+
+    # Stripe webhook (no trailing slash)
     path('stripe/webhook', StripeWebhookView.as_view(), name='stripe-webhook'),
 
-    # Include all registered router URLs
+    # Router URLs
     path('', include(router.urls)),
 ]

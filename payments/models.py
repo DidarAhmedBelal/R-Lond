@@ -7,11 +7,26 @@ from users.models import BaseModel
 
 
 class Payment(BaseModel):
+
+    order = models.ForeignKey(
+        'orders.Order',
+        on_delete=models.CASCADE,
+        related_name='payments',
+        null=True,  
+        blank=True  
+    )
+
+
     product = models.ForeignKey(
         "products.Product",
         on_delete=models.CASCADE,
-        related_name="payments"
+        related_name="payments",
+        null=True,  
+        blank=True 
     )
+
+
+
     vendor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
