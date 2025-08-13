@@ -31,6 +31,9 @@ from payments.views import PaymentViewSet, StripeWebhookView
 # Orders
 from orders.views import OrderViewSet, AddShippingAddressView, CartViewSet, OrderReceiptView
 
+from common.views import OrderManagementViewSet
+
+from products.views import TopSellProductViewSet
 
 # Router config
 router = DefaultRouter()
@@ -56,6 +59,10 @@ router.register('payments', PaymentViewSet, basename='payment')
 router.register('orders', OrderViewSet, basename='order')
 
 router.register('cart', CartViewSet, basename='cart')
+
+router.register('vendor/order/list', OrderManagementViewSet, basename='order-manage')
+
+router.register('top-sell-products', TopSellProductViewSet, basename='top-sell-product')
 
 
 urlpatterns = [

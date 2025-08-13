@@ -13,6 +13,9 @@ from orders.enums import OrderStatus, DeliveryType
 from users.enums import UserRole
 from rest_framework.exceptions import NotFound
 
+
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -282,3 +285,8 @@ class OrderReceiptView(generics.RetrieveAPIView):
             return self.get_queryset().get(order_id=order_id)
         except Order.DoesNotExist:
             raise NotFound("Receipt not found for this order.")
+        
+
+
+
+

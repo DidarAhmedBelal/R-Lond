@@ -3,7 +3,7 @@ from rest_framework import serializers
 from common.models import Category, Tag, SEO, SavedProduct, Review
 from products.models import Product
 from users.serializers import UserPublicSerializer
-
+from orders.models import Order, OrderItem, ShippingAddress
 
 # -------------------
 # Category
@@ -131,3 +131,52 @@ class ReviewSerializer(serializers.ModelSerializer):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
+
+
+class OrderListSerializer(serializers.ModelSerializer):
+    customer_name = serializers.SerializerMethodField()
+    vendor_name = serializers.SerializerMethodField()
+    total = serializers.DecimalField(source='total_amount', max_digits=10, decimal_places=2, read_only=True)
+    payment_method_display = serializers.CharField(source='get_payment_method_display', read_only=True)
+    order_status_display = serializers.CharField(source='get_order_status_display', read_only=True)
+
+    class Meta:
+        model = Order
+        fields = [
+            'id',
+            'order_id',
+            'order_date',
+            'total',
+            'payment_method_display',
+            'order_status_display',
+            'customer_name',
+            'vendor_name',
+        ]
+
+    def get_customer_name(self, obj):
+        user = obj.customer
+        if user:
+            full_name = getattr(user, 'get_full_name', None)
+            if callable(full_name):
+                name = full_name()
+                if name:
+                    return name
+            name = (user.first_name + " " + user.last_name).strip()
+            if name:
+                return name
+            return getattr(user, 'email', 'Unknown Customer')
+        return None
+
+    def get_vendor_name(self, obj):
+        user = obj.vendor
+        if user:
+            full_name = getattr(user, 'get_full_name', None)
+            if callable(full_name):
+                name = full_name()
+                if name:
+                    return name
+            name = (user.first_name + " " + user.last_name).strip()
+            if name:
+                return name
+            return getattr(user, 'email', 'Unknown Vendor')
+        return None

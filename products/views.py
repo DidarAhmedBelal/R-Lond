@@ -10,6 +10,21 @@ from .serializers import ProductSerializer, ProductImageSerializer
 from products.enums import ProductStatus
 from products.permissions import BasePermission
 from common.models import SEO
+from products.serializers import ProductSerializer
+from django.db.models import Sum
+from products.models import Product
+from django.db.models import Sum, F
+from django.db.models import Case, When
+from rest_framework.permissions import BasePermission
+from rest_framework import filters
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Sum, Case, When, DecimalField
+from users.enums import UserRole
+from orders.models import OrderItem, OrderStatus
+from django.db.models.functions import Coalesce
+from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Sum
+from django.db import models
 
 class IsVendorOrAdmin(BasePermission):
 
@@ -127,3 +142,87 @@ class ProductImageViewSet(viewsets.ModelViewSet):
             created_images.append(ProductImageSerializer(img_obj, context={"request": request}).data)
 
         return Response({"images": created_images}, status=status.HTTP_201_CREATED)
+
+
+
+
+
+
+class IsVendorOrAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and (
+            request.user.role == UserRole.VENDOR.value or
+            request.user.role == UserRole.ADMIN.value
+        )
+
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 10  
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class TopSellProductViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = ProductSerializer
+    permission_classes = [IsVendorOrAdmin]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'is_active', 'vendor']
+    search_fields = ['name', 'sku', 'categories__name', 'tags__name']
+    ordering_fields = ['price1', 'price2', 'price3', 'total_quantity_sold', 'total_discount', 'created_at']
+    ordering = ['-total_quantity_sold']
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        user = self.request.user
+
+
+        delivered_items = OrderItem.objects.filter(order__order_status=OrderStatus.DELIVERED.value)
+
+        top_products = delivered_items.values('product').annotate(
+            total_quantity_sold=Sum('quantity')
+        ).order_by('-total_quantity_sold')
+
+        product_ids = [item['product'] for item in top_products]
+
+        products_qs = Product.objects.filter(id__in=product_ids)
+
+        # Now annotate total_quantity_sold to the products queryset:
+        from django.db.models import Case, When
+
+        # Create a mapping for ordering by preserving order
+        preserved_order = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(product_ids)])
+
+        # Annotate total_quantity_sold manually:
+        # Since we already have total_quantity_sold per product in top_products, 
+        # convert it to a dictionary:
+        quantity_map = {item['product']: item['total_quantity_sold'] for item in top_products}
+
+        # But Django ORM does not let you annotate from Python dict directly,
+        # so annotate total_quantity_sold using Subquery or you can use extra if you want.
+
+        # Here is a simplified approach using Subquery (assuming Django >= 1.11):
+
+        from django.db.models import OuterRef, Subquery
+
+        subquery = OrderItem.objects.filter(
+            order__order_status=OrderStatus.DELIVERED.value,
+            product=OuterRef('pk')
+        ).values('product').annotate(total_qty=Sum('quantity')).values('total_qty')
+
+        products = products_qs.annotate(
+            total_quantity_sold=Subquery(subquery, output_field=models.IntegerField())
+        ).order_by(preserved_order)
+
+        return products
+
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)

@@ -13,6 +13,24 @@ from common.serializers import (
 )
 from products.models import Product 
 from products.enums import ProductStatus
+from orders.models import Order, OrderItem, ShippingAddress
+from orders.serializers import OrderReceiptSerializer
+from common.serializers import OrderListSerializer
+from rest_framework.permissions import BasePermission
+from users.enums import UserRole
+from payments.enums import PaymentStatusEnum
+from rest_framework import viewsets, permissions, filters
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Q
+import logging
+logger = logging.getLogger(__name__)
+
+
+class IsVendor(BasePermission):
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) == UserRole.VENDOR.value
+
 
 
 # -------------------
@@ -167,3 +185,39 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
         serializer.save(user=user)
 
+
+class StandardResultsSetPagination(PageNumberPagination):
+    page_size = 5
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class OrderManagementViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [permissions.IsAuthenticated, IsVendor]
+    serializer_class = OrderListSerializer
+    pagination_class = StandardResultsSetPagination
+
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    search_fields = ['order_id', 'customer__first_name', 'customer__last_name', 'vendor__first_name', 'vendor__last_name']
+    filterset_fields = ['payment_status', 'order_status'] 
+
+    def get_queryset(self):
+        user = self.request.user
+        if getattr(user, 'role', None) != 'vendor':
+            return Order.objects.none()
+
+        queryset = Order.objects.filter(vendor=user)
+
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date and end_date:
+            queryset = queryset.filter(order_date__date__range=[start_date, end_date])
+
+        payment_status = self.request.query_params.get('payment_status')
+        if payment_status:
+            if payment_status.lower() == 'none':
+                queryset = queryset.filter(payment_status__isnull=True)
+            elif payment_status.lower() != 'all':
+                queryset = queryset.filter(payment_status__iexact=payment_status)
+
+        return queryset.order_by('-order_date')

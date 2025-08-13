@@ -36,7 +36,6 @@ class ProductSerializer(serializers.ModelSerializer):
     seo = serializers.PrimaryKeyRelatedField(
         queryset=SEO.objects.all(), required=False, allow_null=True
     )
-
     images = ProductImageSerializer(many=True, read_only=True)
 
     # Computed fields
@@ -44,6 +43,9 @@ class ProductSerializer(serializers.ModelSerializer):
     average_rating = serializers.FloatField(read_only=True)
     available_stock = serializers.IntegerField(read_only=True)
     slug = serializers.SlugField(read_only=True)
+
+    total_quantity_sold = serializers.SerializerMethodField()
+    total_discount = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -58,13 +60,26 @@ class ProductSerializer(serializers.ModelSerializer):
             'status', 'featured', 'is_active',
             'active_price', 'average_rating', 'available_stock',
             'images',
-            'created_at', 'updated_at', 'is_approve'
+            'created_at', 'updated_at', 'is_approve',
+            'total_quantity_sold',
+            'total_discount',
         ]
         read_only_fields = [
             'id', 'vendor', 'slug', 'status', 'featured',
             'active_price', 'average_rating', 'available_stock',
-            'created_at', 'updated_at', 'is_active', 'is_approve'
+            'created_at', 'updated_at', 'is_active', 'is_approve',
+            'total_quantity_sold',
+            'total_discount',
         ]
+
+    def get_total_quantity_sold(self, obj):
+        return getattr(obj, 'total_quantity_sold', 0)
+
+    def get_total_discount(self, obj):
+        discount = getattr(obj, 'total_discount', None)
+        if discount is None:
+            return "0.00"
+        return str(discount)
 
 
     def validate(self, attrs):
