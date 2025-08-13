@@ -33,7 +33,11 @@ from orders.views import OrderViewSet, AddShippingAddressView, CartViewSet, Orde
 
 from common.views import OrderManagementViewSet
 
-from products.views import TopSellProductViewSet
+from products.views import TopSellProductViewSet, PromotionViewSet, VendorProductList
+
+from dashboard.views import VendorDashboardView, VendorSalesOverviewView
+
+
 
 # Router config
 router = DefaultRouter()
@@ -64,6 +68,10 @@ router.register('vendor/order/list', OrderManagementViewSet, basename='order-man
 
 router.register('top-sell-products', TopSellProductViewSet, basename='top-sell-product')
 
+router.register('vendor/products', VendorProductList, basename='vendor-products')
+
+router.register('promotions', PromotionViewSet, basename='promotion')
+
 
 urlpatterns = [
     # Auth & Profile
@@ -76,6 +84,14 @@ urlpatterns = [
     path('forgot-password/confirm/', ForgotPasswordConfirmView.as_view(), name='forgot-password-confirm'),
     path('orders/add-shipping-address/', AddShippingAddressView.as_view(), name='add-shipping-address'),
     path("receipt/<str:order_id>/", OrderReceiptView.as_view(), name="order-receipt"),
+
+    path('vendor/dashboard/', VendorDashboardView.as_view(), name='vendor-dashboard'),
+
+# GET /api/dashboard/vendor/sales-overview?period=7days
+# GET /api/dashboard/vendor/sales-overview?period=30days
+# GET /api/dashboard/vendor/sales-overview?period=year
+
+    path("vendor/sales-overview/", VendorSalesOverviewView.as_view(), name="vendor-sales-overview"),
 
 
     # Stripe webhook (no trailing slash)

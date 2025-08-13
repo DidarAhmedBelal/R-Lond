@@ -131,3 +131,6 @@ class PaymentSerializer(serializers.ModelSerializer):
         validated_data["amount"] = order.total_amount
 
         return super().create(validated_data)
+
+
+

@@ -7,8 +7,9 @@ from django.conf import settings
 from decimal import Decimal
 import uuid
 from users.models import BaseModel
-from products.enums import ProductStatus
+from products.enums import ProductStatus, DiscountType
 from django.db.models import Avg
+from django.utils import timezone
 
 User = settings.AUTH_USER_MODEL
 
@@ -113,6 +114,10 @@ class Product(BaseModel):
     @property
     def available_stock(self):
         return None if not self.is_stock else self.stock_quantity
+    
+    @property
+    def prod_id(self):
+        return f"PROD-{1000 + self.id}"
 
     def get_absolute_url(self):
         try:
@@ -138,3 +143,71 @@ class ProductImage(BaseModel):
         if self.is_primary:
             ProductImage.objects.filter(product=self.product, is_primary=True).exclude(pk=self.pk).update(is_primary=False)
         super().save(*args, **kwargs)
+
+
+
+
+
+
+
+
+class Promotion(BaseModel):
+    name = models.CharField(max_length=255)
+    discount_type = models.CharField(
+        max_length=20,
+        choices=DiscountType.choices,
+        default=DiscountType.PERCENTAGE.value
+    )
+    discount_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Enter percentage (0-100) for percentage discount or amount for flat discount."
+    )
+    products = models.ManyToManyField(
+        "products.Product",
+        related_name="promotions",
+        help_text="Select products this promotion applies to."
+    )
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    description = models.TextField(blank=True, null=True)
+
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["-start_datetime"]
+        indexes = [
+            models.Index(fields=["name"]),
+            models.Index(fields=["discount_type"]),
+            models.Index(fields=["start_datetime", "end_datetime"]),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_discount_type_display()} - {self.discount_value})"
+
+    def clean(self):
+        if self.discount_type == DiscountType.PERCENTAGE.value:
+            if self.discount_value < 0 or self.discount_value > 100:
+                raise ValidationError("Percentage discount must be between 0 and 100.")
+
+        if self.end_datetime <= self.start_datetime:
+            raise ValidationError("End date must be after start date.")
+
+    def calculate_discounted_price(self, product_price: Decimal) -> Decimal:
+        if self.discount_type == DiscountType.PERCENTAGE.value:
+            discount_amount = (product_price * self.discount_value) / 100
+        else:  
+            discount_amount = self.discount_value
+        final_price = max(product_price - discount_amount, Decimal('0.00'))
+        return final_price
+
+    @property
+    def status(self):
+        now = timezone.now()
+        if self.start_datetime > now:
+            return "Scheduled"
+        elif self.end_datetime < now:
+            return "Expired"
+        else:
+            return "Active"

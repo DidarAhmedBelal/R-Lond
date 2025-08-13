@@ -11,3 +11,18 @@ class ProductStatus(str, Enum):
     @classmethod
     def choices(cls):
         return [(key.value, key.name.title()) for key in cls]
+
+
+
+
+class DiscountType(str, Enum):
+    PERCENTAGE = "percentage"
+    FLAT = "flat"
+
+    @classmethod
+    def choices(cls):
+        labels = {
+            cls.PERCENTAGE: "Percentage (%)",
+            cls.FLAT: "Flat Amount ($)"
+        }
+        return [(member.value, labels[member]) for member in cls]

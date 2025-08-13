@@ -25,6 +25,10 @@ from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum
 from django.db import models
+from django.db.models import OuterRef, Subquery
+from products.models import Promotion
+from products.serializers import PromotionSerializer,VendorProductSerializer
+
 
 class IsVendorOrAdmin(BasePermission):
 
@@ -186,23 +190,9 @@ class TopSellProductViewSet(viewsets.ReadOnlyModelViewSet):
 
         products_qs = Product.objects.filter(id__in=product_ids)
 
-        # Now annotate total_quantity_sold to the products queryset:
-        from django.db.models import Case, When
 
-        # Create a mapping for ordering by preserving order
         preserved_order = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(product_ids)])
-
-        # Annotate total_quantity_sold manually:
-        # Since we already have total_quantity_sold per product in top_products, 
-        # convert it to a dictionary:
         quantity_map = {item['product']: item['total_quantity_sold'] for item in top_products}
-
-        # But Django ORM does not let you annotate from Python dict directly,
-        # so annotate total_quantity_sold using Subquery or you can use extra if you want.
-
-        # Here is a simplified approach using Subquery (assuming Django >= 1.11):
-
-        from django.db.models import OuterRef, Subquery
 
         subquery = OrderItem.objects.filter(
             order__order_status=OrderStatus.DELIVERED.value,
@@ -226,3 +216,80 @@ class TopSellProductViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    
+
+
+
+
+class PromotionViewSet(viewsets.ModelViewSet):
+    serializer_class = PromotionSerializer
+    queryset = Promotion.objects.all()
+
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['discount_type', 'is_active', 'products']
+    search_fields = ['name', 'description']
+    ordering_fields = ['start_datetime', 'end_datetime', 'discount_value']
+    ordering = ['-start_datetime']
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.role == UserRole.ADMIN.value:
+            return Promotion.objects.all()
+
+        elif user.role == UserRole.VENDOR.value:
+            return Promotion.objects.filter(products__vendor=user).distinct()
+
+        else:
+            raise PermissionDenied("You do not have permission to access promotions.")
+
+    def perform_create(self, serializer):
+        user = self.request.user
+
+        if user.role not in [UserRole.ADMIN.value, UserRole.VENDOR.value]:
+            raise PermissionDenied("Only vendors or admins can create promotions.")
+
+        products = serializer.validated_data.get("products", [])
+        if user.role == UserRole.VENDOR.value:
+            for product in products:
+                if product.vendor != user:
+                    raise PermissionDenied("You can only create promotions for your own products.")
+
+        serializer.save()
+
+    def perform_update(self, serializer):
+        user = self.request.user
+
+        if user.role not in [UserRole.ADMIN.value, UserRole.VENDOR.value]:
+            raise PermissionDenied("Only vendors or admins can update promotions.")
+
+        products = serializer.validated_data.get("products", [])
+        if user.role == UserRole.VENDOR.value:
+            for product in products:
+                if product.vendor != user:
+                    raise PermissionDenied("You can only update promotions for your own products.")
+
+        serializer.save()
+
+
+
+
+class VendorProductList(viewsets.ModelViewSet):
+    serializer_class = VendorProductSerializer
+    permission_classes = [permissions.IsAuthenticated, IsVendorOrAdmin]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [filters.SearchFilter, DjangoFilterBackend, filters.OrderingFilter]
+    search_fields = ['name']
+    filterset_fields = ['categories', 'status']  
+    ordering_fields = ['status']
+
+    def get_queryset(self):
+        user = self.request.user
+        base_qs = Product.objects.select_related("seo").prefetch_related("categories", "tags", "images")
+
+        if user.role == UserRole.VENDOR.value:
+            return base_qs.filter(vendor=user)
+        elif user.role == UserRole.ADMIN.value:
+            return base_qs
+        else:
+            raise PermissionDenied("You do not have permission to view vendor products.")

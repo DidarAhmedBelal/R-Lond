@@ -88,6 +88,7 @@ INSTALLED_APPS = [
     'common',
     'payments',
     'orders',
+    'dashboard',
 ]
 
 
