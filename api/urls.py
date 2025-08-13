@@ -37,6 +37,7 @@ from products.views import TopSellProductViewSet, PromotionViewSet, VendorProduc
 
 from dashboard.views import VendorDashboardView, VendorSalesOverviewView
 
+from dashboard.views import PayoutRequestViewSet, VendorPaymentsStatsView, VendorSalesPerformanceView
 
 
 # Router config
@@ -72,6 +73,7 @@ router.register('vendor/products', VendorProductList, basename='vendor-products'
 
 router.register('promotions', PromotionViewSet, basename='promotion')
 
+router.register("payouts", PayoutRequestViewSet, basename="payout")
 
 urlpatterns = [
     # Auth & Profile
@@ -93,6 +95,10 @@ urlpatterns = [
 
     path("vendor/sales-overview/", VendorSalesOverviewView.as_view(), name="vendor-sales-overview"),
 
+    path("vendor/payments-stats/", VendorPaymentsStatsView.as_view(), name="vendor-payments-stats"),
+
+
+    path("vendor/sales-performance/", VendorSalesPerformanceView.as_view(), name="vendor-sales-performance"),
 
     # Stripe webhook (no trailing slash)
     path('stripe/webhook', StripeWebhookView.as_view(), name='stripe-webhook'),
