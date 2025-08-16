@@ -89,6 +89,7 @@ INSTALLED_APPS = [
     'payments',
     'orders',
     'dashboard',
+    'terms'
 ]
 
 

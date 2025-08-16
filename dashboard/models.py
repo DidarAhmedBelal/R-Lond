@@ -19,8 +19,8 @@ class PayoutRequest(models.Model):
     note = models.TextField(blank=True, null=True)
     status = models.CharField(
         max_length=20,
-        choices=PayoutStatusEnum.choices,
-        default=PayoutStatusEnum.PENDING
+        choices=PayoutStatusEnum.choices(),
+        default=PayoutStatusEnum.PENDING.value
     )
     created_at = models.DateTimeField(default=now)
     updated_at = models.DateTimeField(auto_now=True)

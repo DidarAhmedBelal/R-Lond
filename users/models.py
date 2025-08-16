@@ -139,8 +139,9 @@ class SellerApplication(BaseModel):
     owner_images = models.ManyToManyField(SellerOwnerImage, blank=True)
 
     # Localization Plans
-    home_localization_plan = models.FileField(upload_to="seller/localization/home/", blank=True, null=True)
-    business_localization_plan = models.FileField(upload_to="seller/localization/business/", blank=True, null=True)
+    home_localization_plan = models.TextField(blank=True, null=True)
+    business_localization_plan = models.TextField(blank=True, null=True)
+
     taxpayer_doc = models.FileField(upload_to="seller/taxpayer/", blank=True, null=True)
     trade_register_doc = models.FileField(upload_to="seller/trade_register/", blank=True, null=True)
 

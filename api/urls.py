@@ -11,6 +11,8 @@ from users.views import (
     UserProfileUpdateView,
     ForgotPasswordRequestView,
     ForgotPasswordConfirmView,
+    CustomerListViewSet,
+    VendorListViewSet
 )
 
 # Products
@@ -38,6 +40,8 @@ from products.views import TopSellProductViewSet, PromotionViewSet, VendorProduc
 from dashboard.views import VendorDashboardView, VendorSalesOverviewView
 
 from dashboard.views import PayoutRequestViewSet, VendorPaymentsStatsView, VendorSalesPerformanceView
+
+from terms.views import AdminTermsViewSet, PrivacyPolicyView, TermsConditionView
 
 
 # Router config
@@ -75,6 +79,13 @@ router.register('promotions', PromotionViewSet, basename='promotion')
 
 router.register("payouts", PayoutRequestViewSet, basename="payout")
 
+router.register('admin/policies', AdminTermsViewSet, basename='admin-policies')
+
+
+router.register("customers", CustomerListViewSet, basename="customers")
+router.register("vendors", VendorListViewSet, basename="vendors")
+
+
 urlpatterns = [
     # Auth & Profile
     path('login/', UserLoginView.as_view(), name='user-login'),
@@ -97,6 +108,8 @@ urlpatterns = [
 
     path("vendor/payments-stats/", VendorPaymentsStatsView.as_view(), name="vendor-payments-stats"),
 
+    path('terms/', TermsConditionView.as_view(), name='terms-condition'),
+    path('privacy/', PrivacyPolicyView.as_view(), name='privacy-policy'),
 
     path("vendor/sales-performance/", VendorSalesPerformanceView.as_view(), name="vendor-sales-performance"),
 

@@ -4,7 +4,11 @@ from django.utils import timezone
 from datetime import timedelta
 from users.enums import SellerApplicationStatus
 import random, string
-
+from payments.models import Payment
+from orders.models import Order
+from products.models import Product
+from django.db.models import Count, Avg
+from common.models import Review
 
 # --------------------------
 # USER SERIALIZERS
@@ -211,3 +215,78 @@ class SellerApplicationAdminUpdateSerializer(serializers.ModelSerializer):
         instance.updated_at = timezone.now()
         instance.save()
         return instance
+    
+
+class CustomerListSerializer(serializers.ModelSerializer):
+    user_id = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+    payment_status = serializers.SerializerMethodField()
+    signup_date = serializers.DateTimeField(source="created_at", format="%Y-%m-%d")
+    last_activity = serializers.DateTimeField(source="last_login", format="%Y-%m-%d %H:%M", allow_null=True)
+    actions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "user_id", "customer_name", "payment_status",
+            "signup_date", "last_activity", "actions"
+        ]
+
+    def get_user_id(self, obj):
+        return f"Wrioko{1000 + obj.id}"
+
+    def get_customer_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip()
+
+    def get_payment_status(self, obj):
+        last_payment = Payment.objects.filter(customer=obj).order_by("-created_at").first()
+        return last_payment.status if last_payment else "N/A"
+
+    def get_actions(self, obj):
+        return {
+            "view_url": f"/admin/customers/{obj.id}/view",
+            "delete_url": f"/admin/customers/{obj.id}/delete"
+        }
+
+
+
+class VendorListSerializer(serializers.ModelSerializer):
+    user_id = serializers.SerializerMethodField()
+    vendor_name = serializers.SerializerMethodField()
+    approval_status = serializers.CharField(source="seller_application.status", default="N/A")
+    products_count = serializers.SerializerMethodField()
+    orders_count = serializers.SerializerMethodField()
+    ratings = serializers.SerializerMethodField()
+    signup_date = serializers.DateTimeField(source="created_at", format="%Y-%m-%d")
+    last_activity = serializers.DateTimeField(source="last_login", format="%Y-%m-%d %H:%M", allow_null=True)
+    actions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "user_id", "vendor_name", "approval_status",
+            "products_count", "orders_count", "ratings",
+            "signup_date", "last_activity", "actions"
+        ]
+
+    def get_user_id(self, obj):
+        return f"Wrioko{1000 + obj.id}"
+
+    def get_vendor_name(self, obj):
+        return f"{obj.first_name} {obj.last_name}".strip()
+
+    def get_products_count(self, obj):
+        return Product.objects.filter(vendor=obj).count()
+
+    def get_orders_count(self, obj):
+        return Order.objects.filter(vendor=obj).count()
+
+    def get_ratings(self, obj):
+        avg_rating = Review.objects.filter(product__vendor=obj).aggregate(avg=Avg("rating"))["avg"]
+        return round(avg_rating or 0, 2)
+
+    def get_actions(self, obj):
+        return {
+            "view_url": f"/admin/vendors/{obj.id}/view",
+            "delete_url": f"/admin/vendors/{obj.id}/delete"
+        }

@@ -6,7 +6,7 @@ from django.contrib.auth import authenticate
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.parsers import MultiPartParser, FormParser
 import random, string
-
+from users.enums import UserRole
 from users.serializers import (
     UserSignupSerializer,
     UserProfileUpdateSerializer,
@@ -15,10 +15,13 @@ from users.serializers import (
     UserSerializer,
     UserLoginResponseSerializer,
     UserLoginSerializer,
-    SellerApplicationSerializer
+    SellerApplicationSerializer,
+    VendorListSerializer,
+    CustomerListSerializer
 )
 from users.models import User, SellerApplication
 from users.enums import SellerApplicationStatus
+from users.permissions import IsRoleAdmin
 
 
 # ----------------------
@@ -229,3 +232,27 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         if role in ['vendor', 'customer', 'admin']:
             queryset = queryset.filter(role=role)
         return queryset
+
+
+
+
+class CustomerListViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = User.objects.filter(role=UserRole.CUSTOMER.value).order_by("-created_at")
+    serializer_class = CustomerListSerializer
+    permission_classes = [IsRoleAdmin]
+
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["first_name", "last_name", "email"]
+    filterset_fields = ["role"]
+    ordering_fields = ["created_at", "last_login"]
+
+
+class VendorListViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = User.objects.filter(role=UserRole.VENDOR.value).order_by("-created_at")
+    serializer_class = VendorListSerializer
+    permission_classes = [IsRoleAdmin]
+
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["first_name", "last_name", "email"]
+    filterset_fields = ["role"]
+    ordering_fields = ["created_at"]

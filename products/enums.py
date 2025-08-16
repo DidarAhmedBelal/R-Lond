@@ -1,28 +1,13 @@
-from enum import Enum
+from django.db import models
 
-class ProductStatus(str, Enum):
-    DRAFT = "draft"
-    APPROVED = "approved"  
-    REJECTED = "rejected"  
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    ARCHIVED = "archived"
+class ProductStatus(models.TextChoices):
+    DRAFT = "draft", "Draft"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    ACTIVE = "active", "Active"
+    INACTIVE = "inactive", "Inactive"
+    ARCHIVED = "archived", "Archived"
 
-    @classmethod
-    def choices(cls):
-        return [(key.value, key.name.title()) for key in cls]
-
-
-
-
-class DiscountType(str, Enum):
-    PERCENTAGE = "percentage"
-    FLAT = "flat"
-
-    @classmethod
-    def choices(cls):
-        labels = {
-            cls.PERCENTAGE: "Percentage (%)",
-            cls.FLAT: "Flat Amount ($)"
-        }
-        return [(member.value, labels[member]) for member in cls]
+class DiscountType(models.TextChoices):
+    PERCENTAGE = "percentage", "Percentage (%)"
+    FLAT = "flat", "Flat Amount ($)"

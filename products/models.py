@@ -22,12 +22,10 @@ class Product(BaseModel):
         limit_choices_to={"role": "vendor"},
     )
 
-    # taxonomy - string references to avoid circular import
     categories = models.ManyToManyField("common.Category", related_name="products", blank=True)
     tags = models.ManyToManyField("common.Tag", related_name="products", blank=True)
     seo = models.ForeignKey("common.SEO", on_delete=models.SET_NULL, null=True, blank=True)
 
-    # identity
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True, blank=True)
     sku = models.CharField(max_length=64, blank=True, null=True, help_text="Optional SKU for inventory")
@@ -35,12 +33,10 @@ class Product(BaseModel):
     short_description = models.CharField(max_length=500, blank=True)
     full_description = models.TextField(blank=True)
 
-    # pricing
     price1 = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
     price2 = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True, validators=[MinValueValidator(Decimal('0.00'))])
     price3 = models.DecimalField(max_digits=12, decimal_places=2, blank=True, null=True, validators=[MinValueValidator(Decimal('0.00'))])
 
-    # inventory & variants
     option1 = models.CharField(max_length=100, blank=True)
     option2 = models.CharField(max_length=100, blank=True)
     option3 = models.CharField(max_length=100, blank=True)
@@ -49,17 +45,15 @@ class Product(BaseModel):
     is_stock = models.BooleanField(default=True)
     stock_quantity = models.PositiveIntegerField(default=0)
 
-    # delivery
     home_delivery = models.BooleanField(default=False)
     pickup = models.BooleanField(default=False)
     partner_delivery = models.BooleanField(default=False)
     estimated_delivery_days = models.PositiveIntegerField(blank=True, null=True)
 
-    # metadata
     status = models.CharField(
         max_length=30,
-        choices=ProductStatus.choices(),
-        default=ProductStatus.DRAFT.value
+        choices=ProductStatus.choices,
+        default=ProductStatus.DRAFT
     )
     featured = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True, help_text="General availability toggle")
@@ -145,18 +139,12 @@ class ProductImage(BaseModel):
         super().save(*args, **kwargs)
 
 
-
-
-
-
-
-
 class Promotion(BaseModel):
     name = models.CharField(max_length=255)
     discount_type = models.CharField(
         max_length=20,
-        choices=DiscountType.choices,
-        default=DiscountType.PERCENTAGE.value
+        choices=DiscountType.choices,  
+        default=DiscountType.PERCENTAGE,
     )
     discount_value = models.DecimalField(
         max_digits=10,
@@ -172,7 +160,6 @@ class Promotion(BaseModel):
     start_datetime = models.DateTimeField()
     end_datetime = models.DateTimeField()
     description = models.TextField(blank=True, null=True)
-
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -187,7 +174,7 @@ class Promotion(BaseModel):
         return f"{self.name} ({self.get_discount_type_display()} - {self.discount_value})"
 
     def clean(self):
-        if self.discount_type == DiscountType.PERCENTAGE.value:
+        if self.discount_type == DiscountType.PERCENTAGE:
             if self.discount_value < 0 or self.discount_value > 100:
                 raise ValidationError("Percentage discount must be between 0 and 100.")
 
@@ -195,12 +182,11 @@ class Promotion(BaseModel):
             raise ValidationError("End date must be after start date.")
 
     def calculate_discounted_price(self, product_price: Decimal) -> Decimal:
-        if self.discount_type == DiscountType.PERCENTAGE.value:
+        if self.discount_type == DiscountType.PERCENTAGE:
             discount_amount = (product_price * self.discount_value) / 100
         else:  
             discount_amount = self.discount_value
-        final_price = max(product_price - discount_amount, Decimal('0.00'))
-        return final_price
+        return max(product_price - discount_amount, Decimal('0.00'))
 
     @property
     def status(self):
