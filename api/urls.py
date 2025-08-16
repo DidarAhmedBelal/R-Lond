@@ -16,7 +16,7 @@ from users.views import (
 )
 
 # Products
-from products.views import ProductViewSet, ProductImageViewSet
+from products.views import ProductViewSet, ProductImageViewSet, ReturnProductViewSet
 
 # Common
 from common.views import (
@@ -83,7 +83,11 @@ router.register('admin/policies', AdminTermsViewSet, basename='admin-policies')
 
 
 router.register("customers", CustomerListViewSet, basename="customers")
+
 router.register("vendors", VendorListViewSet, basename="vendors")
+
+
+router.register("returns/product", ReturnProductViewSet, basename="returnproduct")
 
 
 urlpatterns = [

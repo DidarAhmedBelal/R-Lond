@@ -235,11 +235,10 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 
-
 class CustomerListViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.filter(role=UserRole.CUSTOMER.value).order_by("-created_at")
     serializer_class = CustomerListSerializer
-    permission_classes = [IsRoleAdmin]
+    permission_classes = [permissions.IsAdminUser]
 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["first_name", "last_name", "email"]
@@ -250,7 +249,7 @@ class CustomerListViewSet(viewsets.ReadOnlyModelViewSet):
 class VendorListViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.filter(role=UserRole.VENDOR.value).order_by("-created_at")
     serializer_class = VendorListSerializer
-    permission_classes = [IsRoleAdmin]
+    permission_classes = [permissions.IsAdminUser]
 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["first_name", "last_name", "email"]

@@ -20,7 +20,7 @@ from rest_framework import filters
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Sum, Case, When, DecimalField
 from users.enums import UserRole
-from orders.models import OrderItem, OrderStatus
+from orders.models import OrderItem, OrderStatus, Order
 from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum
@@ -28,6 +28,8 @@ from django.db import models
 from django.db.models import OuterRef, Subquery
 from products.models import Promotion
 from products.serializers import PromotionSerializer,VendorProductSerializer
+from products.models import ReturnProduct
+from products.serializers import ReturnProductSerializer
 
 
 class IsVendorOrAdmin(BasePermission):
@@ -74,10 +76,11 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if not (user.is_staff or getattr(user, "role", None) == "vendor"):
+
+        if not (user.is_staff or getattr(user, "role", None) in [UserRole.ADMIN.value, UserRole.VENDOR.value]):
             raise PermissionDenied("Only vendors or admins can add products.")
 
-        seo_data = self.request.data.get('seo')
+        seo_data = self.request.data.get("seo")
         seo_obj = None
 
         if isinstance(seo_data, dict):
@@ -88,7 +91,10 @@ class ProductViewSet(viewsets.ModelViewSet):
             except SEO.DoesNotExist:
                 raise serializers.ValidationError({"seo": "SEO object not found."})
 
-        serializer.save(vendor=user, seo=seo_obj)
+        if getattr(user, "role", None) == UserRole.ADMIN.value or user.is_staff:
+            serializer.save(vendor=user, seo=seo_obj, status=ProductStatus.APPROVED)
+        elif getattr(user, "role", None) == UserRole.VENDOR.value:
+            serializer.save(vendor=user, seo=seo_obj, status=ProductStatus.PENDING)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def accept(self, request, pk=None):
@@ -293,3 +299,42 @@ class VendorProductList(viewsets.ModelViewSet):
             return base_qs
         else:
             raise PermissionDenied("You do not have permission to view vendor products.")
+
+
+class ReturnProductViewSet(viewsets.ModelViewSet):
+    queryset = ReturnProduct.objects.all()
+    serializer_class = ReturnProductSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+
+        if user.is_staff or getattr(user, "role", None) == UserRole.ADMIN.value:
+            return ReturnProduct.objects.all()
+
+        if getattr(user, "role", None) == UserRole.VENDOR.value:
+            return ReturnProduct.objects.filter(order_item__product__vendor=user)
+
+        if getattr(user, "role", None) == UserRole.CUSTOMER.value:
+            return ReturnProduct.objects.filter(requested_by=user)
+
+        return ReturnProduct.objects.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+
+        if getattr(user, "role", None) != UserRole.CUSTOMER.value:
+            raise PermissionDenied("Only customers can request returns.")
+
+        order_item = serializer.validated_data.get("order_item")
+
+        # verify ownership
+        if order_item.order.customer != user:
+            raise PermissionDenied("You can only return products from your own orders.")
+
+        # verify delivery status
+        if order_item.status != OrderStatus.DELIVERED.value:
+            raise serializers.ValidationError(
+                {"order_item": "You can only return products from delivered orders."}
+            )
+
+        serializer.save(requested_by=user)

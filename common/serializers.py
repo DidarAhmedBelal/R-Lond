@@ -4,6 +4,17 @@ from common.models import Category, Tag, SEO, SavedProduct, Review
 from products.models import Product
 from users.serializers import UserPublicSerializer
 from orders.models import Order, OrderItem, ShippingAddress
+from common.models import ImageUpload
+
+
+
+
+class ImageUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ImageUpload
+        fields = ["id", "image", "alt_text", "uploaded_at"]
+
+
 
 # -------------------
 # Category

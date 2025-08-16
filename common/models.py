@@ -7,8 +7,30 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from decimal import Decimal
 from common.enums import SavedProductStatus
+import os
 
 User = settings.AUTH_USER_MODEL
+
+
+def upload_to(instance, filename):
+    ext = filename.split('.')[-1]
+    filename = f"{uuid.uuid4()}.{ext}"
+    return os.path.join("uploads/common/", filename)
+
+
+class ImageUpload(models.Model):
+    image = models.ImageField(upload_to=upload_to)
+    alt_text = models.CharField(max_length=255, blank=True, help_text="Optional alt text for SEO/accessibility")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+
+    def __str__(self):
+        return self.alt_text or f"Image {self.pk}"
+
+
+
 
 
 class Category(BaseModel):
@@ -109,32 +131,3 @@ class Review(BaseModel):
 
     def __str__(self):
         return f"Review by {getattr(self.user, 'email', self.user)} for {self.product.name}"
-
-
-# class CartItem(BaseModel):
-#     product = models.ForeignKey(
-#         "products.Product",  
-#         on_delete=models.CASCADE,
-#         related_name="cart_items"
-#     )
-#     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="cart_items")
-#     quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
-#     price_snapshot = models.DecimalField(
-#         max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))]
-#     )
-
-#     class Meta:
-#         ordering = ["-updated_at"]
-#         indexes = [models.Index(fields=["user"]), models.Index(fields=["product"])]
-#         unique_together = ("product", "user")
-
-#     def __str__(self):
-#         return f"{self.quantity} × {self.product.name} for {getattr(self.user, 'email', self.user)}"
-
-#     @property
-#     def subtotal(self):
-#         return (self.price_snapshot or Decimal("0.00")) * Decimal(self.quantity)
-
-#     def clean(self):
-#         if self.product.is_stock and self.quantity > self.product.stock_quantity:
-#             raise ValidationError({"quantity": "Requested quantity exceeds available stock."})

@@ -1,6 +1,7 @@
 from django.db import models
 
 class ProductStatus(models.TextChoices):
+    PENDING = "pending", "Pending" 
     DRAFT = "draft", "Draft"
     APPROVED = "approved", "Approved"
     REJECTED = "rejected", "Rejected"
@@ -11,3 +12,9 @@ class ProductStatus(models.TextChoices):
 class DiscountType(models.TextChoices):
     PERCENTAGE = "percentage", "Percentage (%)"
     FLAT = "flat", "Flat Amount ($)"
+
+
+class ReturnStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"

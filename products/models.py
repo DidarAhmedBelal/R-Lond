@@ -7,12 +7,13 @@ from django.conf import settings
 from decimal import Decimal
 import uuid
 from users.models import BaseModel
-from products.enums import ProductStatus, DiscountType
+from products.enums import ProductStatus, DiscountType, ReturnStatus
 from django.db.models import Avg
 from django.utils import timezone
 
-User = settings.AUTH_USER_MODEL
 
+
+User = settings.AUTH_USER_MODEL
 
 class Product(BaseModel):
     vendor = models.ForeignKey(
@@ -197,3 +198,51 @@ class Promotion(BaseModel):
             return "Expired"
         else:
             return "Active"
+        
+
+
+
+
+
+
+class ReturnProduct(BaseModel):
+    product = models.ForeignKey(
+        "products.Product",
+        on_delete=models.CASCADE,
+        related_name="return_requests"
+    )
+    order_item = models.ForeignKey(
+        "orders.OrderItem",
+        on_delete=models.CASCADE,
+        related_name="return_requests"
+    )
+    reason = models.TextField()
+    additional_info = models.TextField(blank=True, null=True)
+    uploaded_images = models.ManyToManyField(
+        "common.ImageUpload",
+        related_name="return_requests",
+        blank=True
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=ReturnStatus.choices,
+        default=ReturnStatus.PENDING,
+    )
+
+    requested_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="return_requests"
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["product", "status"])]
+
+    def __str__(self):
+        return f"Return request for {self.product.name} - {self.status}"
+
+    def clean(self):
+        if self.pk and self.uploaded_images.count() > 5:
+            raise ValidationError("You can upload a maximum of 5 images for a return request.")

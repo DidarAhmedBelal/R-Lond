@@ -129,9 +129,15 @@ class OrderItem(BaseModel):
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
     quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
     price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
+    status = models.CharField(
+        max_length=20,
+        choices=OrderStatus.choices(),
+        default=OrderStatus.PENDING.value
+    )
 
     def __str__(self):
         return f"{self.quantity} x {self.product.name} for {self.order.order_id}"
+
 
 
 # -----------------------------

@@ -5,6 +5,13 @@ from products.models import Product, ProductImage, Promotion
 from common.models import Category, Tag, SEO
 from products.enums import DiscountType
 from django.db.models import Q
+from products.models import ReturnProduct
+from products.models import ReturnProduct
+from common.models import ImageUpload
+from users.enums import UserRole
+from orders.models import OrderItem
+from orders.enums import OrderStatus
+
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
@@ -218,3 +225,60 @@ class VendorProductSerializer(serializers.ModelSerializer):
         if primary_img:
             return primary_img.image.url
         return None
+
+
+class ReturnProductSerializer(serializers.ModelSerializer):
+    requested_by = serializers.HiddenField(default=serializers.CurrentUserDefault())
+    uploaded_images = serializers.PrimaryKeyRelatedField(
+        many=True,
+        read_only=False,
+        queryset=ImageUpload.objects.all(),
+        required=False
+    )
+    status = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = ReturnProduct
+        fields = "__all__"
+        read_only_fields = ["id", "created_at", "updated_at", "status"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+
+        # restrict order_item dropdown for customers
+        if request and hasattr(request, "user"):
+            user = request.user
+            if getattr(user, "role", None) == UserRole.CUSTOMER.value:
+                self.fields["order_item"].queryset = OrderItem.objects.filter(
+                    order__customer=user,
+                    status=OrderStatus.DELIVERED.value  # এখন ঠিক আছে
+                )
+
+    def validate(self, data):
+        user = self.context["request"].user
+        order_item = data.get("order_item")
+
+        if not order_item:
+            raise serializers.ValidationError({"order_item": "Order is required."})
+
+        # Ensure only customers can request returns
+        if getattr(user, "role", None) != UserRole.CUSTOMER.value:
+            raise serializers.ValidationError("Only customers can request product returns.")
+
+        # Ensure the order item belongs to this customer
+        if order_item.order.customer != user:
+            raise serializers.ValidationError("You can only return products from your own orders.")
+
+        # Ensure only delivered items can be returned
+        if order_item.status != OrderStatus.DELIVERED.value:
+            raise serializers.ValidationError(
+                {"order_item": "You can only return products from delivered orders."}
+            )
+
+        # Limit to 5 images
+        images = data.get("uploaded_images", [])
+        if len(images) > 5:
+            raise serializers.ValidationError({"uploaded_images": "Maximum 5 images allowed."})
+
+        return data

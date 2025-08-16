@@ -192,27 +192,42 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 100
 
 
+
 class OrderManagementViewSet(viewsets.ReadOnlyModelViewSet):
-    permission_classes = [permissions.IsAuthenticated, IsVendor]
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = OrderListSerializer
     pagination_class = StandardResultsSetPagination
 
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    search_fields = ['order_id', 'customer__first_name', 'customer__last_name', 'vendor__first_name', 'vendor__last_name']
-    filterset_fields = ['payment_status', 'order_status'] 
+    search_fields = [
+        'order_id',
+        'customer__first_name',
+        'customer__last_name',
+        'vendor__first_name',
+        'vendor__last_name'
+    ]
+    filterset_fields = ['payment_status', 'order_status']
 
     def get_queryset(self):
         user = self.request.user
-        if getattr(user, 'role', None) != 'vendor':
+
+        # Admin can see all orders
+        if getattr(user, 'role', None) == UserRole.ADMIN.value:
+            queryset = Order.objects.all()
+        # Vendor can see only own orders
+        elif getattr(user, 'role', None) == UserRole.VENDOR.value:
+            queryset = Order.objects.filter(vendor=user)
+        else:
+            # Customer or others see nothing
             return Order.objects.none()
 
-        queryset = Order.objects.filter(vendor=user)
-
+        # Date range filter
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         if start_date and end_date:
             queryset = queryset.filter(order_date__date__range=[start_date, end_date])
 
+        # Payment status filter
         payment_status = self.request.query_params.get('payment_status')
         if payment_status:
             if payment_status.lower() == 'none':
@@ -221,7 +236,3 @@ class OrderManagementViewSet(viewsets.ReadOnlyModelViewSet):
                 queryset = queryset.filter(payment_status__iexact=payment_status)
 
         return queryset.order_by('-order_date')
-
-
-
-
