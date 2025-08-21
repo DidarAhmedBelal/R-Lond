@@ -29,11 +29,19 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = [host.strip() for host in config('ALLOWED_HOSTS', default='').split(',') if host.strip()]
+# ALLOWED_HOSTS = [host.strip() for host in config('ALLOWED_HOSTS', default='').split(',') if host.strip()]
+ALLOWED_HOSTS = ['*']  # Allow all hosts for development; change in production
 
 AUTH_USER_MODEL = 'users.User'
 
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in config('CORS_ALLOWED_ORIGINS', default='').split(',') if origin.strip()]
+# CORS_ALLOWED_ORIGINS = [origin.strip() for origin in config('CORS_ALLOWED_ORIGINS', default='').split(',') if origin.strip()]
+CORS_ALLOW_ALL_ORIGINS = True
+
+
+
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media' 
 
 # Stripe Keys
 STRIPE_WEBHOOK_SECRET = config("STRIPE_WEBHOOK_SECRET")

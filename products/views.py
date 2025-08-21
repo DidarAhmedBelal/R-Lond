@@ -14,7 +14,7 @@ from products.serializers import ProductSerializer
 from django.db.models import Sum
 from products.models import Product
 from django.db.models import Sum, F
-from django.db.models import Case, When
+from django.db.models import Case, When, IntegerField
 from rest_framework.permissions import BasePermission
 from rest_framework import filters
 from rest_framework.pagination import PageNumberPagination
@@ -99,8 +99,12 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def accept(self, request, pk=None):
         product = self.get_object()
+        if product.status not in [ProductStatus.PENDING.value]:
+            return Response({"detail": "Only pending products can be reviewed."}, status=status.HTTP_400_BAD_REQUEST)
+
         if product.status == ProductStatus.APPROVED.value:
             return Response({"detail": "Product already approved."}, status=status.HTTP_400_BAD_REQUEST)
+        
         product.status = ProductStatus.APPROVED.value
         product.is_active = True  
         product.save()
@@ -135,24 +139,39 @@ class ProductImageViewSet(viewsets.ModelViewSet):
             qs = qs.filter(product_id=product_id)
         return qs
 
-    def create(self, request, *args, **kwargs):
+    def perform_create(self, serializer):
         product_id = self.kwargs.get("product_pk")
         product = get_object_or_404(Product, pk=product_id)
 
-        if not (request.user.is_staff or (getattr(request.user, "role", None) == "vendor" and product.vendor == request.user)):
+        if not (
+            self.request.user.is_staff
+            or (
+                getattr(self.request.user, "role", None) == UserRole.VENDOR.value
+                and product.vendor == self.request.user
+            )
+        ):
             raise PermissionDenied("You do not have permission to add images to this product.")
 
-        images = request.FILES.getlist("images")
+        images = self.request.FILES.getlist("images")
         if not images:
-            return Response({"detail": "No images uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+            raise serializers.ValidationError({"images": "No images uploaded."})
 
         created_images = []
         for image in images:
             img_obj = ProductImage.objects.create(product=product, image=image)
-            created_images.append(ProductImageSerializer(img_obj, context={"request": request}).data)
+            created_images.append(img_obj)
 
-        return Response({"images": created_images}, status=status.HTTP_201_CREATED)
+        return created_images
 
+    def create(self, request, *args, **kwargs):
+        created_images = self.perform_create(None)
+        serializer = self.get_serializer(created_images, many=True)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {"detail": "Images uploaded successfully.", "images": serializer.data},
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 
 
@@ -172,6 +191,11 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 100
 
 
+
+
+
+
+
 class TopSellProductViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [IsVendorOrAdmin]
@@ -185,32 +209,37 @@ class TopSellProductViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         user = self.request.user
 
-
+        # Delivered order items
         delivered_items = OrderItem.objects.filter(order__order_status=OrderStatus.DELIVERED.value)
 
+        # If vendor, only include their own products
+        if user.role == UserRole.VENDOR.value:
+            delivered_items = delivered_items.filter(product__vendor=user)
+
+        # Aggregate total sold quantities
         top_products = delivered_items.values('product').annotate(
             total_quantity_sold=Sum('quantity')
         ).order_by('-total_quantity_sold')
 
         product_ids = [item['product'] for item in top_products]
 
+        # Filter products based on aggregated IDs
         products_qs = Product.objects.filter(id__in=product_ids)
 
-
+        # Preserve order based on total_quantity_sold
         preserved_order = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(product_ids)])
-        quantity_map = {item['product']: item['total_quantity_sold'] for item in top_products}
 
+        # Annotate products with total_quantity_sold using a subquery
         subquery = OrderItem.objects.filter(
             order__order_status=OrderStatus.DELIVERED.value,
             product=OuterRef('pk')
         ).values('product').annotate(total_qty=Sum('quantity')).values('total_qty')
 
         products = products_qs.annotate(
-            total_quantity_sold=Subquery(subquery, output_field=models.IntegerField())
+            total_quantity_sold=Subquery(subquery, output_field=IntegerField())
         ).order_by(preserved_order)
 
         return products
-
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
@@ -222,7 +251,9 @@ class TopSellProductViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-    
+
+
+
 
 
 
@@ -299,6 +330,24 @@ class VendorProductList(viewsets.ModelViewSet):
             return base_qs
         else:
             raise PermissionDenied("You do not have permission to view vendor products.")
+
+    def perform_update(self, serializer):
+        product = self.get_object()
+        user = self.request.user
+
+        if user.role == UserRole.ADMIN.value or (user.role == UserRole.VENDOR.value and product.vendor == user):
+            serializer.save()
+        else:
+            raise PermissionDenied("You do not have permission to update this product.")
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+
+        if user.role == UserRole.ADMIN.value or (user.role == UserRole.VENDOR.value and instance.vendor == user):
+            instance.delete()
+        else:
+            raise PermissionDenied("You do not have permission to delete this product.")
+
 
 
 class ReturnProductViewSet(viewsets.ModelViewSet):

@@ -5,7 +5,7 @@ from products.models import Product
 from users.serializers import UserPublicSerializer
 from orders.models import Order, OrderItem, ShippingAddress
 from common.models import ImageUpload
-
+from common.models import ReviewImage
 
 
 
@@ -121,14 +121,25 @@ class SavedProductSerializer(serializers.ModelSerializer):
 # -------------------
 # Review
 # -------------------
+
+
+class ReviewImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReviewImage
+        fields = ['id', 'image', 'alt_text', 'uploaded_at']
+        read_only_fields = ['id', 'uploaded_at']
+
+
 class ReviewSerializer(serializers.ModelSerializer):
     user = UserPublicSerializer(read_only=True)
     product_name = serializers.CharField(source='product.name', read_only=True)
+    images = ReviewImageSerializer(many=True, required=False)  # nested images
 
     class Meta:
         model = Review
         fields = [
             'id', 'product', 'product_name', 'user', 'rating', 'comment',
+            'images',  # add images here
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']
@@ -139,8 +150,27 @@ class ReviewSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        images_data = validated_data.pop('images', [])
         validated_data['user'] = self.context['request'].user
-        return super().create(validated_data)
+        review = super().create(validated_data)
+
+        # create images
+        for img_data in images_data:
+            ReviewImage.objects.create(review=review, **img_data)
+
+        return review
+
+    def update(self, instance, validated_data):
+        images_data = validated_data.pop('images', None)
+        review = super().update(instance, validated_data)
+
+        if images_data is not None:
+            # optional: clear existing images and replace
+            instance.images.all().delete()
+            for img_data in images_data:
+                ReviewImage.objects.create(review=review, **img_data)
+
+        return review
 
 
 

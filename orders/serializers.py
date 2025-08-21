@@ -44,10 +44,14 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'quantity', 'price']
 
 
+
+
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
 
-    # Accept shipping address for creation
+    # Accept cart_id for creation
+    cart_id = serializers.IntegerField(write_only=True, required=True)
+
     shipping_address = ShippingAddressSerializer(write_only=True)
     shipping_addresses = ShippingAddressSerializer(many=True, read_only=True)
 
@@ -65,6 +69,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'order_id',
             'customer', 'customer_name',
             'vendor', 'vendor_name',
+            'cart_id',  # for create
 
             # Monetary
             'subtotal',
@@ -94,6 +99,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'items',
             'shipping_address',       # for create
             'shipping_addresses',     # for read
+                            # for create from cart
         ]
         read_only_fields = [
             'order_id',
@@ -108,28 +114,30 @@ class OrderSerializer(serializers.ModelSerializer):
             'payment_status',
         ]
 
-    def validate_order_status(self, value):
-        valid_statuses = [status.value for status in OrderStatus]
-        if value not in valid_statuses:
-            raise serializers.ValidationError(f"Invalid order status. Valid options: {valid_statuses}")
-        return value
-
-    def validate_delivery_type(self, value):
-        valid_types = [t.value for t in DeliveryType]
-        if value not in valid_types:
-            raise serializers.ValidationError(f"Invalid delivery type. Valid options: {valid_types}")
-        return value
-
-    def validate_payment_method(self, value):
-        valid_methods = [pm.value for pm in PaymentMethod]
-        if value not in valid_methods:
-            raise serializers.ValidationError(f"Invalid payment method. Valid options: {valid_methods}")
-        return value
-
     def create(self, validated_data):
         shipping_data = validated_data.pop('shipping_address', None)
+        cart_id = validated_data.pop('cart_id')
+
+        user = self.context['request'].user
+
+        # get all cart items for this cart_id
+        cart_items = CartItem.objects.filter(user=user, id=cart_id, saved_for_later=False)
+        if not cart_items.exists():
+            raise serializers.ValidationError({"cart_id": "Cart is empty or invalid."})
+
         order = super().create(validated_data)
 
+        # create order items from cart items
+        for cart_item in cart_items:
+            OrderItem.objects.create(
+                order=order,
+                product=cart_item.product,
+                quantity=cart_item.quantity,
+                price=cart_item.price_snapshot,
+            )
+            cart_item.delete()  
+
+        # shipping address
         if shipping_data:
             ShippingAddress.objects.create(order=order, **shipping_data)
         else:
@@ -142,6 +150,9 @@ class OrderSerializer(serializers.ModelSerializer):
                 zip_code="0000"
             )
         return order
+
+
+
 
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -161,7 +172,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         product = validated_data['product']
         quantity = validated_data.get('quantity', 1)
-        price_snapshot = product.price1  # Adjust if needed to your price field
+        price_snapshot = product.price1
 
         cart_item, created = CartItem.objects.update_or_create(
             user=user,
@@ -175,6 +186,10 @@ class CartItemSerializer(serializers.ModelSerializer):
         instance.quantity = quantity
         instance.save(update_fields=['quantity'])
         return instance
+
+
+
+
 
 
 # ---------------------------

@@ -65,11 +65,19 @@ class ProductSerializer(serializers.ModelSerializer):
     categories = serializers.PrimaryKeyRelatedField(many=True, queryset=Category.objects.all(), required=False)
     tags = serializers.PrimaryKeyRelatedField(many=True, queryset=Tag.objects.all(), required=False)
     seo = serializers.PrimaryKeyRelatedField(queryset=SEO.objects.all(), required=False, allow_null=True)
+
+    # Read existing images
     images = ProductImageSerializer(many=True, read_only=True)
+    # Accept new images on create/update
+    uploaded_images = serializers.ListField(
+        child=serializers.ImageField(),
+        write_only=True,
+        required=False
+    )
 
     active_price = serializers.SerializerMethodField()
     promotion_discount = serializers.SerializerMethodField()
-    promotion_details = serializers.SerializerMethodField()  # new field for discount info
+    promotion_details = serializers.SerializerMethodField()
     average_rating = serializers.FloatField(read_only=True)
     available_stock = serializers.IntegerField(read_only=True)
     slug = serializers.SlugField(read_only=True)
@@ -79,7 +87,6 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            
             'id', 'prod_id', 'vendor', 'categories', 'tags', 'seo',
             'name', 'slug', 'sku',
             'short_description', 'full_description',
@@ -90,10 +97,9 @@ class ProductSerializer(serializers.ModelSerializer):
             'status', 'featured', 'is_active',
             'active_price', 'promotion_discount', 'promotion_details',
             'average_rating', 'available_stock',
-            'images',
+            'images', 'uploaded_images',  
             'created_at', 'updated_at', 'is_approve',
-            'total_quantity_sold',
-            'total_discount',
+            'total_quantity_sold', 'total_discount',
         ]
         read_only_fields = [
             'id', 'vendor', 'slug', 'status', 'featured',
@@ -181,23 +187,36 @@ class ProductSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         categories = validated_data.pop("categories", [])
         tags = validated_data.pop("tags", [])
+        uploaded_images = validated_data.pop("uploaded_images", [])
+
         product = super().create(validated_data)
+
         if categories:
             product.categories.set(categories)
         if tags:
             product.tags.set(tags)
-        return product
 
+        for image in uploaded_images:
+            ProductImage.objects.create(product=product, image=image)
+
+        return product
+    
     def update(self, instance, validated_data):
         categories = validated_data.pop("categories", None)
         tags = validated_data.pop("tags", None)
+        uploaded_images = validated_data.pop("uploaded_images", [])
+
         product = super().update(instance, validated_data)
+
         if categories is not None:
             product.categories.set(categories)
         if tags is not None:
             product.tags.set(tags)
-        return product
 
+        for image in uploaded_images:
+            ProductImage.objects.create(product=product, image=image)
+
+        return product
 
 
 

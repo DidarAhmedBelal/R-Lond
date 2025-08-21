@@ -40,8 +40,8 @@ def create_order_from_cart(user, shipping_data, delivery_type=DeliveryType.STAND
         raise ValueError("Cart is empty")
 
     vendors = {ci.product.vendor for ci in cart_qs}
-    if len(vendors) > 1:
-        raise ValueError("Cart contains items from multiple vendors. Please checkout per vendor.")
+    # if len(vendors) > 1:
+    #     raise ValueError("Cart contains items from multiple vendors. Please checkout per vendor.")
 
     vendor = vendors.pop()
 
@@ -123,6 +123,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         instance = serializer.save()
         logger.info(f"Order {instance.order_id} updated with status {instance.order_status}")
 
+
+
+
     @action(detail=False, methods=['post'], url_path='create-from-cart')
     def create_from_cart_action(self, request):
         try:
@@ -146,6 +149,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         except (ValidationError, ValueError) as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
 
     @action(detail=False, methods=['post'], url_path='create-single')
     def create_single_action(self, request):
@@ -207,6 +213,10 @@ class AddShippingAddressView(generics.CreateAPIView):
         logger.info(f"Shipping address added to order {order.id} by user {self.request.user.id}")
 
 
+
+
+
+
 # -------- Cart ViewSet --------
 class CartViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
@@ -254,6 +264,7 @@ class CartViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
         if product.status != ProductStatus.APPROVED.value:
             raise PermissionDenied("Cannot review unapproved products.")
+
 
 
 

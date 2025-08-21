@@ -131,3 +131,20 @@ class Review(BaseModel):
 
     def __str__(self):
         return f"Review by {getattr(self.user, 'email', self.user)} for {self.product.name}"
+
+
+class ReviewImage(BaseModel):
+    review = models.ForeignKey(
+        Review, 
+        on_delete=models.CASCADE, 
+        related_name="images"
+    )
+    image = models.ImageField(upload_to=upload_to)
+    alt_text = models.CharField(max_length=255, blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-uploaded_at"]
+
+    def __str__(self):
+        return self.alt_text or f"Image {self.pk} for Review {self.review.pk}"

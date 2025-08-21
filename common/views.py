@@ -156,7 +156,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
     permission_classes = [
         permissions.IsAuthenticatedOrReadOnly,
-        IsOwnerOrReadOnly
     ]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['product__name', 'comment']
@@ -164,13 +163,11 @@ class ReviewViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
 
     def get_queryset(self):
-
-        return Review.objects.select_related('product', 'user').filter(
+        return Review.objects.select_related('product', 'user').prefetch_related('images').filter(
             product__status=ProductStatus.APPROVED.value
         )
 
     def perform_create(self, serializer):
-
         user = self.request.user
 
         # Only customers can create reviews
@@ -183,7 +180,15 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if product.status != ProductStatus.APPROVED.value:
             raise PermissionDenied("Cannot review a product that is not approved.")
 
+        # Save review (nested images handled in serializer)
         serializer.save(user=user)
+
+    def perform_update(self, serializer):
+        # Optional: ensure user can only update their own review
+        review = self.get_object()
+        if review.user != self.request.user:
+            raise PermissionDenied("You can only update your own review.")
+        serializer.save()
 
 
 class StandardResultsSetPagination(PageNumberPagination):
