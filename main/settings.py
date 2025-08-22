@@ -45,6 +45,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # Stripe Keys
 STRIPE_WEBHOOK_SECRET = config("STRIPE_WEBHOOK_SECRET")
+print("jsutcheck", STRIPE_WEBHOOK_SECRET)
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY')
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY')
 
@@ -59,6 +60,8 @@ DELIVERY_FEES = {
     "express": Decimal("150.00"),
     "pickup": Decimal("0.00"),
 }
+
+FRONTEND_URL = "http://localhost:5173"
 FRONTEND_PAYMENT_SUCCESS_URL = config('FRONTEND_PAYMENT_SUCCESS_URL', default=None)
 FRONTEND_PAYMENT_CANCEL_URL = config('FRONTEND_PAYMENT_CANCEL_URL', default=None)
 
@@ -87,17 +90,21 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
     'drf_yasg',
     'corsheaders',
     'rest_framework',
     'django_filters',
+    'channels',
+
     'users',
     'products',
     'common',
     'payments',
     'orders',
     'dashboard',
-    'terms'
+    'terms',
+    'chat',
 ]
 
 

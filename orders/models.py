@@ -143,27 +143,18 @@ class OrderItem(BaseModel):
 # -----------------------------
 # Cart Item
 # -----------------------------
+# models.py
 class CartItem(BaseModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="cart_items")
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="cart_items")
     quantity = models.PositiveIntegerField(default=1, validators=[MinValueValidator(1)])
-    price_snapshot = models.DecimalField(
-        max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))]
-    )
+    price_snapshot = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.00"))])
     saved_for_later = models.BooleanField(default=False)
 
     class Meta:
-        ordering = ["-updated_at"]
-        indexes = [
-            models.Index(fields=["user"]),
-            models.Index(fields=["product"]),
-        ]
         unique_together = ("product", "user")
+        ordering = ["-updated_at"]
 
-    def __str__(self):
-        return f"{self.quantity} × {self.product.name} for {getattr(self.user, 'email', self.user)}"
-
-    @property
     def subtotal(self):
         return (self.price_snapshot or Decimal("0.00")) * Decimal(self.quantity)
 
@@ -171,6 +162,7 @@ class CartItem(BaseModel):
         if getattr(self.product, "is_stock", False) and getattr(self.product, "stock_quantity", None) is not None:
             if self.quantity > self.product.stock_quantity:
                 raise ValidationError({"quantity": "Requested quantity exceeds available stock."})
+
 
 
 # -----------------------------

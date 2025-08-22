@@ -24,6 +24,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.pagination import PageNumberPagination
 from django.db.models import Q
 import logging
+from common.models import Banner
+from common.serializers import BannerSerializer
+from common.permissions import IsAdminOrReadOnly
+
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -213,17 +219,22 @@ class OrderManagementViewSet(viewsets.ReadOnlyModelViewSet):
     ]
     filterset_fields = ['payment_status', 'order_status']
 
+
     def get_queryset(self):
         user = self.request.user
 
-        # Admin can see all orders
-        if getattr(user, 'role', None) == UserRole.ADMIN.value:
+        print("role", user.role)
+
+        # Admin sees all orders
+        if getattr(user, 'role', None) == UserRole.ADMIN.value or getattr(user, 'is_staff', False):
             queryset = Order.objects.all()
-        # Vendor can see only own orders
+        # Vendor sees only orders containing their products
         elif getattr(user, 'role', None) == UserRole.VENDOR.value:
-            queryset = Order.objects.filter(vendor=user)
+            queryset = Order.objects.filter(items__product__vendor=user).distinct()
+        # Customer sees only their own orders
+        elif getattr(user, 'role', None) == UserRole.CUSTOMER.value:
+            queryset = Order.objects.filter(customer=user)
         else:
-            # Customer or others see nothing
             return Order.objects.none()
 
         # Date range filter
@@ -241,3 +252,51 @@ class OrderManagementViewSet(viewsets.ReadOnlyModelViewSet):
                 queryset = queryset.filter(payment_status__iexact=payment_status)
 
         return queryset.order_by('-order_date')
+
+
+        # Date range filter
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date and end_date:
+            queryset = queryset.filter(order_date__date__range=[start_date, end_date])
+
+        # Payment status filter
+        payment_status = self.request.query_params.get('payment_status')
+        if payment_status:
+            if payment_status.lower() == 'none':
+                queryset = queryset.filter(payment_status__isnull=True)
+            elif payment_status.lower() != 'all':
+                queryset = queryset.filter(payment_status__iexact=payment_status)
+
+        return queryset.order_by('-order_date')
+
+
+
+# views.py
+class BannerViewSet(viewsets.ModelViewSet):
+    queryset = Banner.objects.all()
+    serializer_class = BannerSerializer
+    permission_classes = [IsAdminOrReadOnly]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['title', 'subtitle', 'alt_text', 'description']
+    ordering_fields = ['created_at', 'updated_at', 'position']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        is_active = self.request.query_params.get('is_active')
+
+        if is_active is not None:
+            # Convert string to bool safely
+            if is_active.lower() in ["true", "1", "yes"]:
+                queryset = queryset.filter(is_active=True)
+            elif is_active.lower() in ["false", "0", "no"]:
+                queryset = queryset.filter(is_active=False)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    def perform_update(self, serializer):
+        serializer.save()

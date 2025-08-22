@@ -148,3 +148,25 @@ class ReviewImage(BaseModel):
 
     def __str__(self):
         return self.alt_text or f"Image {self.pk} for Review {self.review.pk}"
+
+
+
+
+
+class Banner(BaseModel):
+    title = models.CharField(max_length=255, blank=True)
+    subtitle = models.CharField(max_length=255, blank=True)
+    image = models.ImageField(upload_to=upload_to)
+    link = models.URLField(max_length=500, blank=True, null=True)
+    alt_text = models.CharField(max_length=255, blank=True)
+    position = models.PositiveSmallIntegerField(default=0, help_text="Position in the banner rotation")
+    start_datetime = models.DateTimeField(blank=True, null=True)
+    end_datetime = models.DateTimeField(blank=True, null=True)
+    is_active = models.BooleanField(default=True, help_text="Is this banner currently active?")
+
+    class Meta:
+        ordering = ["position", "-created_at"]
+        indexes = [models.Index(fields=["position"])]
+
+    def __str__(self):
+        return f"Banner {self.pk} - {self.alt_text or 'No Alt Text'}"

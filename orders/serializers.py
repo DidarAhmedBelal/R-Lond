@@ -4,10 +4,12 @@ from decimal import Decimal
 from products.models import Product
 from products.serializers import ProductSerializer
 from .models import Order, OrderItem, ShippingAddress, CartItem
-from orders.enums import OrderStatus, DeliveryType, PaymentMethod
+from orders.enums import DeliveryType
+from products.enums import ProductStatus
 
-
-class ShippingAddressSerializer(serializers.ModelSerializer):
+# -------- Shipping Address Serializers --------
+class ShippingAddressInlineSerializer(serializers.ModelSerializer):
+    """For nesting inside other serializers (no order_id)."""
     class Meta:
         model = ShippingAddress
         fields = [
@@ -35,214 +37,142 @@ class ShippingAddressSerializer(serializers.ModelSerializer):
             "flat_number": {"required": False, "allow_blank": True},
         }
 
+class ShippingAddressAttachSerializer(ShippingAddressInlineSerializer):
+    """For /orders/add-shipping-address/ endpoint (needs order_id)."""
+    order_id = serializers.IntegerField(write_only=True, required=True)
 
+    class Meta(ShippingAddressInlineSerializer.Meta):
+        fields = ["order_id"] + ShippingAddressInlineSerializer.Meta.fields
+
+
+# -------- Order Items --------
 class OrderItemSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
-
     class Meta:
         model = OrderItem
-        fields = ['id', 'product', 'quantity', 'price']
+        fields = ["id", "product", "quantity", "price"]
 
 
-
-
+# -------- Order (Read Serializer) --------
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
+    shipping_addresses = ShippingAddressInlineSerializer(many=True, read_only=True)
 
-    # Accept cart_id for creation
-    cart_id = serializers.IntegerField(write_only=True, required=True)
+    customer_name = serializers.CharField(source="customer.get_full_name", read_only=True)
+    vendor_name   = serializers.CharField(source="vendor.get_full_name", read_only=True)
 
-    shipping_address = ShippingAddressSerializer(write_only=True)
-    shipping_addresses = ShippingAddressSerializer(many=True, read_only=True)
-
-    customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
-    vendor_name = serializers.CharField(source='vendor.get_full_name', read_only=True)
-
-    order_status_display = serializers.CharField(source='get_order_status_display', read_only=True)
-    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
-    delivery_type_display = serializers.CharField(source='get_delivery_type_display', read_only=True)
+    order_status_display   = serializers.CharField(source="get_order_status_display", read_only=True)
+    payment_status_display = serializers.CharField(source="get_payment_status_display", read_only=True)
+    delivery_type_display  = serializers.CharField(source="get_delivery_type_display",  read_only=True)
 
     class Meta:
         model = Order
         fields = [
-            'id',
-            'order_id',
-            'customer', 'customer_name',
-            'vendor', 'vendor_name',
-            'cart_id',  # for create
+            "id", "order_id",
+            "customer", "customer_name",
+            "vendor", "vendor_name",
 
             # Monetary
-            'subtotal',
-            'discount_amount',
-            'promo_code',
-            'tax_amount',
-            'delivery_fee',
-            'total_amount',
+            "subtotal", "discount_amount", "promo_code",
+            "tax_amount", "delivery_fee", "total_amount",
 
             # Delivery
-            'delivery_type', 'delivery_type_display',
-            'delivery_instructions',
-            'estimated_delivery',
-            'delivery_date',
+            "delivery_type", "delivery_type_display",
+            "delivery_instructions", "estimated_delivery", "delivery_date",
 
             # Status
-            'payment_method',
-            'payment_status', 'payment_status_display',
-            'order_status', 'order_status_display',
+            "payment_method", "payment_status", "payment_status_display",
+            "order_status", "order_status_display",
 
             # Other
-            'order_date',
-            'item_count',
-            'notes',
+            "order_date", "item_count", "notes",
 
             # Related
-            'items',
-            'shipping_address',       # for create
-            'shipping_addresses',     # for read
-                            # for create from cart
+            "items", "shipping_addresses",
         ]
         read_only_fields = [
-            'order_id',
-            'order_date',
-            'items',
-            'subtotal',
-            'tax_amount',
-            'delivery_fee',
-            'total_amount',
-            'item_count',
-            'order_status',
-            'payment_status',
+            "order_id", "order_date", "items",
+            "subtotal", "tax_amount", "delivery_fee", "total_amount",
+            "item_count", "order_status", "payment_status",
         ]
 
-    def create(self, validated_data):
-        shipping_data = validated_data.pop('shipping_address', None)
-        cart_id = validated_data.pop('cart_id')
 
-        user = self.context['request'].user
-
-        # get all cart items for this cart_id
-        cart_items = CartItem.objects.filter(user=user, id=cart_id, saved_for_later=False)
-        if not cart_items.exists():
-            raise serializers.ValidationError({"cart_id": "Cart is empty or invalid."})
-
-        order = super().create(validated_data)
-
-        # create order items from cart items
-        for cart_item in cart_items:
-            OrderItem.objects.create(
-                order=order,
-                product=cart_item.product,
-                quantity=cart_item.quantity,
-                price=cart_item.price_snapshot,
-            )
-            cart_item.delete()  
-
-        # shipping address
-        if shipping_data:
-            ShippingAddress.objects.create(order=order, **shipping_data)
-        else:
-            ShippingAddress.objects.create(
-                order=order,
-                full_name="N/A",
-                phone_number="N/A",
-                street_address="N/A",
-                city="N/A",
-                zip_code="0000"
-            )
-        return order
-
-
-
-
-
+# -------- Cart --------
 class CartItemSerializer(serializers.ModelSerializer):
     product = ProductSerializer(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
-        queryset=Product.objects.all(),
+        queryset=Product.objects.filter(status=ProductStatus.APPROVED.value, is_active=True),
         write_only=True,
-        source='product'
+        source="product"
     )
 
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'product_id', 'quantity', 'price_snapshot']
-        read_only_fields = ['id', 'price_snapshot']
+        fields = ["id", "product", "product_id", "quantity", "price_snapshot"]
+        read_only_fields = ["id", "price_snapshot"]
 
     def create(self, validated_data):
-        user = self.context['request'].user
-        product = validated_data['product']
-        quantity = validated_data.get('quantity', 1)
+        user = self.context["request"].user
+        product = validated_data["product"]
+        quantity = validated_data.get("quantity", 1)
         price_snapshot = product.price1
-
         cart_item, created = CartItem.objects.update_or_create(
-            user=user,
-            product=product,
-            defaults={'quantity': quantity, 'price_snapshot': price_snapshot}
+            user=user, product=product,
+            defaults={"quantity": quantity, "price_snapshot": price_snapshot}
         )
         return cart_item
 
     def update(self, instance, validated_data):
-        quantity = validated_data.get('quantity', instance.quantity)
-        instance.quantity = quantity
-        instance.save(update_fields=['quantity'])
+        instance.quantity = validated_data.get("quantity", instance.quantity)
+        instance.save(update_fields=["quantity"])
         return instance
 
 
-
-
-
-
-# ---------------------------
-# Receipt Serializers
-# ---------------------------
-
+# -------- Receipt --------
 class ReceiptOrderItemSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name")
-    price = serializers.DecimalField(source='product.price1', max_digits=10, decimal_places=2)
+    price = serializers.DecimalField(source="product.price1", max_digits=10, decimal_places=2)
 
     class Meta:
         model = OrderItem
-        fields = ['product_name', 'quantity', 'price']
+        fields = ["product_name", "quantity", "price"]
 
 
 class OrderReceiptSerializer(serializers.ModelSerializer):
     items = ReceiptOrderItemSerializer(many=True, read_only=True)
     shipping_address = serializers.SerializerMethodField()
-    customer_name = serializers.CharField(source='customer.get_full_name', read_only=True)
-    vendor_name = serializers.CharField(source='vendor.get_full_name', read_only=True)
-    order_status_display = serializers.CharField(source='get_order_status_display', read_only=True)
-    payment_status_display = serializers.CharField(source='get_payment_status_display', read_only=True)
-    delivery_type_display = serializers.CharField(source='get_delivery_type_display', read_only=True)
+    customer_name = serializers.CharField(source="customer.get_full_name", read_only=True)
+    vendor_name   = serializers.CharField(source="vendor.get_full_name",   read_only=True)
+    order_status_display   = serializers.CharField(source="get_order_status_display", read_only=True)
+    payment_status_display = serializers.CharField(source="get_payment_status_display", read_only=True)
+    delivery_type_display  = serializers.CharField(source="get_delivery_type_display",  read_only=True)
 
     class Meta:
         model = Order
         fields = [
-            'order_id',
-            'order_date',
-            'estimated_delivery',
-            'customer_name',
-            'vendor_name',
-            'items',
-            'subtotal',
-            'discount_amount',
-            'tax_amount',
-            'delivery_fee',
-            'total_amount',
-            'delivery_type_display',
-            'order_status_display',
-            'payment_status_display',
-            'payment_method',
-            'shipping_address'
+            "order_id", "order_date", "estimated_delivery",
+            "customer_name", "vendor_name",
+            "items", "subtotal", "discount_amount", "tax_amount", "delivery_fee", "total_amount",
+            "delivery_type_display", "order_status_display", "payment_status_display",
+            "payment_method", "shipping_address",
         ]
 
     def get_shipping_address(self, obj):
         shipping = obj.shipping_addresses.first()
-        if not shipping:
-            return None
+        if shipping:
+            return {
+                "full_name": shipping.full_name,
+                "phone_number": shipping.phone_number,
+                "street_address": shipping.street_address,
+                "city": shipping.city,
+                "zip_code": shipping.zip_code,
+            }
+        # Fallback to User profile
+        user = obj.customer
         return {
-            "full_name": shipping.full_name,
-            "phone_number": shipping.phone_number,
-            "street_address": shipping.street_address,
-            "city": shipping.city,
-            "zip_code": shipping.zip_code
+            "full_name": user.get_full_name() or "",
+            "phone_number": getattr(user, "phone_number", "") or "",
+            "street_address": getattr(user, "address", "") or "",
+            "city": getattr(user, "city", "") or "",
+            "zip_code": getattr(user, "zip_code", "") or "",
         }

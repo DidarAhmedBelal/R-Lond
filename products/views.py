@@ -30,6 +30,7 @@ from products.models import Promotion
 from products.serializers import PromotionSerializer,VendorProductSerializer
 from products.models import ReturnProduct
 from products.serializers import ReturnProductSerializer
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 
 class IsVendorOrAdmin(BasePermission):
@@ -51,9 +52,90 @@ class IsVendorOrAdmin(BasePermission):
     
 
 
+# class ProductViewSet(viewsets.ModelViewSet):
+#     serializer_class = ProductSerializer
+#     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsVendorOrAdmin]
+
+#     def get_queryset(self):
+#         qs = Product.objects.select_related("seo", "vendor").prefetch_related(
+#             "categories", "tags", "images"
+#         )
+#         user = self.request.user
+
+#         if user.is_authenticated:
+#             if user.is_staff or user.is_superuser:
+#                 return qs
+            
+#             if getattr(user, "role", None) == "vendor":
+#                 return qs.filter(vendor=user)
+
+#         return qs.filter(
+#             is_active=True,
+#             status=ProductStatus.APPROVED.value
+#         )
+
+
+#     def perform_create(self, serializer):
+#         user = self.request.user
+
+#         if not (user.is_staff or getattr(user, "role", None) in [UserRole.ADMIN.value, UserRole.VENDOR.value]):
+#             raise PermissionDenied("Only vendors or admins can add products.")
+
+#         seo_data = self.request.data.get("seo")
+#         seo_obj = None
+
+#         if isinstance(seo_data, dict):
+#             seo_obj = SEO.objects.create(**seo_data)
+#         elif seo_data:
+#             try:
+#                 seo_obj = SEO.objects.get(pk=seo_data)
+#             except SEO.DoesNotExist:
+#                 raise serializers.ValidationError({"seo": "SEO object not found."})
+
+#         if getattr(user, "role", None) == UserRole.ADMIN.value or user.is_staff:
+#             serializer.save(vendor=user, seo=seo_obj, status=ProductStatus.APPROVED)
+#         elif getattr(user, "role", None) == UserRole.VENDOR.value:
+#             serializer.save(vendor=user, seo=seo_obj, status=ProductStatus.PENDING)
+
+#     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+#     def accept(self, request, pk=None):
+#         product = self.get_object()
+#         if product.status not in [ProductStatus.PENDING.value]:
+#             return Response({"detail": "Only pending products can be reviewed."}, status=status.HTTP_400_BAD_REQUEST)
+
+#         if product.status == ProductStatus.APPROVED.value:
+#             return Response({"detail": "Product already approved."}, status=status.HTTP_400_BAD_REQUEST)
+        
+#         product.status = ProductStatus.APPROVED.value
+#         product.is_active = True  
+#         product.save()
+#         return Response({
+#             "detail": "Product approved.",
+#             "product": self.get_serializer(product).data
+#         }, status=status.HTTP_200_OK)
+
+#     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
+#     def reject(self, request, pk=None):
+#         product = self.get_object()
+#         if product.status == ProductStatus.REJECTED.value:
+#             return Response({"detail": "Product already rejected."}, status=status.HTTP_400_BAD_REQUEST)
+#         product.status = ProductStatus.REJECTED.value
+#         product.is_active = False 
+#         product.save()
+#         return Response({
+#             "detail": "Product rejected.",
+#             "product": self.get_serializer(product).data
+#         }, status=status.HTTP_200_OK)
+
+
+
+
+
+
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsVendorOrAdmin]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
         qs = Product.objects.select_related("seo", "vendor").prefetch_related(
@@ -64,19 +146,13 @@ class ProductViewSet(viewsets.ModelViewSet):
         if user.is_authenticated:
             if user.is_staff or user.is_superuser:
                 return qs
-            
             if getattr(user, "role", None) == "vendor":
                 return qs.filter(vendor=user)
 
-        return qs.filter(
-            is_active=True,
-            status=ProductStatus.APPROVED.value
-        )
-
+        return qs.filter(is_active=True, status=ProductStatus.APPROVED.value)
 
     def perform_create(self, serializer):
         user = self.request.user
-
         if not (user.is_staff or getattr(user, "role", None) in [UserRole.ADMIN.value, UserRole.VENDOR.value]):
             raise PermissionDenied("Only vendors or admins can add products.")
 
@@ -96,6 +172,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         elif getattr(user, "role", None) == UserRole.VENDOR.value:
             serializer.save(vendor=user, seo=seo_obj, status=ProductStatus.PENDING)
 
+    
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def accept(self, request, pk=None):
         product = self.get_object()
@@ -128,9 +205,12 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 
+
+
 class ProductImageViewSet(viewsets.ModelViewSet):
     serializer_class = ProductImageSerializer
     permission_classes = [permissions.IsAuthenticated, IsVendorOrAdmin]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         qs = ProductImage.objects.select_related("product")
@@ -139,38 +219,36 @@ class ProductImageViewSet(viewsets.ModelViewSet):
             qs = qs.filter(product_id=product_id)
         return qs
 
-    def perform_create(self, serializer):
+    def create(self, request, *args, **kwargs):
         product_id = self.kwargs.get("product_pk")
         product = get_object_or_404(Product, pk=product_id)
 
         if not (
-            self.request.user.is_staff
+            request.user.is_staff
             or (
-                getattr(self.request.user, "role", None) == UserRole.VENDOR.value
-                and product.vendor == self.request.user
+                getattr(request.user, "role", None) == UserRole.VENDOR.value
+                and product.vendor == request.user
             )
         ):
             raise PermissionDenied("You do not have permission to add images to this product.")
 
-        images = self.request.FILES.getlist("images")
+        images = request.FILES.getlist("images")
         if not images:
-            raise serializers.ValidationError({"images": "No images uploaded."})
+            return Response({"detail": "No images uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if product.images.count() + len(images) > 5:
+            return Response({"detail": "You can upload maximum 5 images per product."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         created_images = []
         for image in images:
             img_obj = ProductImage.objects.create(product=product, image=image)
             created_images.append(img_obj)
 
-        return created_images
-
-    def create(self, request, *args, **kwargs):
-        created_images = self.perform_create(None)
-        serializer = self.get_serializer(created_images, many=True)
-        headers = self.get_success_headers(serializer.data)
+        serializer = self.get_serializer(created_images, many=True, context={"product": product})
         return Response(
             {"detail": "Images uploaded successfully.", "images": serializer.data},
             status=status.HTTP_201_CREATED,
-            headers=headers,
         )
 
 

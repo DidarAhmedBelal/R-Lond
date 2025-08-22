@@ -6,7 +6,7 @@ from users.serializers import UserPublicSerializer
 from orders.models import Order, OrderItem, ShippingAddress
 from common.models import ImageUpload
 from common.models import ReviewImage
-
+from common.models import Banner
 
 
 class ImageUploadSerializer(serializers.ModelSerializer):
@@ -224,4 +224,16 @@ class OrderListSerializer(serializers.ModelSerializer):
 
 
 
+class BannerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Banner
+        fields = [
+            'id', 'is_active', 'image', 'title', 'subtitle', 
+            'position', 'alt_text', 'link', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def validate_image(self, value):
+        if not value:
+            raise serializers.ValidationError("Image is required.")
+        return value

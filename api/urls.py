@@ -16,7 +16,14 @@ from users.views import (
 )
 
 # Products
-from products.views import ProductViewSet, ProductImageViewSet, ReturnProductViewSet
+from products.views import (
+    ProductViewSet,
+    ProductImageViewSet,
+    ReturnProductViewSet,
+    TopSellProductViewSet,
+    PromotionViewSet,
+    VendorProductList,
+)
 
 # Common
 from common.views import (
@@ -25,101 +32,115 @@ from common.views import (
     SEOViewSet,
     SavedProductViewSet,
     ReviewViewSet,
+    OrderManagementViewSet,
+    BannerViewSet,
+)
+
+# Dashboard
+from dashboard.views import (
+    VendorDashboardView,
+    VendorSalesOverviewView,
+    VendorPaymentsStatsView,
+    VendorSalesPerformanceView,
+    PayoutRequestViewSet,
+)
+
+# Orders
+from orders.views import (
+    OrderViewSet,
+    AddShippingAddressView,
+    CartViewSet,
+    OrderReceiptView,
 )
 
 # Payments
-from payments.views import PaymentViewSet, StripeWebhookView
+from payments.views import (
+    StripeWebhookView,
+    CheckoutViewSet,
+)
 
-# Orders
-from orders.views import OrderViewSet, AddShippingAddressView, CartViewSet, OrderReceiptView
+# Terms
+from terms.views import (
+    AdminTermsViewSet,
+    PrivacyPolicyView,
+    TermsConditionView,
+)
 
-from common.views import OrderManagementViewSet
-
-from products.views import TopSellProductViewSet, PromotionViewSet, VendorProductList
-
-from dashboard.views import VendorDashboardView, VendorSalesOverviewView
-
-from dashboard.views import PayoutRequestViewSet, VendorPaymentsStatsView, VendorSalesPerformanceView
-
-from terms.views import AdminTermsViewSet, PrivacyPolicyView, TermsConditionView
+# Chat
+from chat import views as chat_views
 
 
-# Router config
+# -------- Router config --------
 router = DefaultRouter()
 
 # Common
-router.register('categories', CategoryViewSet, basename='category')
-router.register('tags', TagViewSet, basename='tag')
-router.register('seo', SEOViewSet, basename='seo')
-router.register('saved-products', SavedProductViewSet, basename='saved-product')
-router.register('product-reviews', ReviewViewSet, basename='product-review')
+router.register("categories", CategoryViewSet, basename="category")
+router.register("tags", TagViewSet, basename="tag")
+router.register("seo", SEOViewSet, basename="seo")
+router.register("saved-products", SavedProductViewSet, basename="saved-product")
+router.register("product-reviews", ReviewViewSet, basename="product-review")
+router.register("admin/policies", AdminTermsViewSet, basename="admin-policies")
+router.register("admin/banners", BannerViewSet, basename="banner")
 
 # Products
-router.register('products', ProductViewSet, basename='product')
-router.register('product-images', ProductImageViewSet, basename='product-image')
+router.register("products", ProductViewSet, basename="product")
+router.register("product-images", ProductImageViewSet, basename="product-image")
+router.register("top-sell-products", TopSellProductViewSet, basename="top-sell-product")
+router.register("promotions", PromotionViewSet, basename="promotion")
+router.register("vendor/products", VendorProductList, basename="vendor-products")
+router.register("returns/product", ReturnProductViewSet, basename="return-product")
 
 # Users
-router.register('seller/applications', SellerApplicationViewSet, basename='seller-application')
-
-# Payments
-router.register('payments', PaymentViewSet, basename='payment')
-
-# Orders
-router.register('orders', OrderViewSet, basename='order')
-
-router.register('cart', CartViewSet, basename='cart')
-
-router.register('vendor/order/list', OrderManagementViewSet, basename='order-manage')
-
-router.register('top-sell-products', TopSellProductViewSet, basename='top-sell-product')
-
-router.register('vendor/products', VendorProductList, basename='vendor-products')
-
-router.register('promotions', PromotionViewSet, basename='promotion')
-
-router.register("payouts", PayoutRequestViewSet, basename="payout")
-
-router.register('admin/policies', AdminTermsViewSet, basename='admin-policies')
-
-
+router.register("seller/applications", SellerApplicationViewSet, basename="seller-application")
 router.register("customers", CustomerListViewSet, basename="customers")
-
 router.register("vendors", VendorListViewSet, basename="vendors")
 
+# Orders & Cart
+router.register("orders", OrderViewSet, basename="order")
+router.register("cart", CartViewSet, basename="cart")
+router.register("vendor/order/list", OrderManagementViewSet, basename="order-manage")
 
-router.register("returns/product", ReturnProductViewSet, basename="returnproduct")
+# Checkout (Stripe)
+router.register("checkout", CheckoutViewSet, basename="checkout")
+
+# Dashboard / Payouts
+router.register("payouts", PayoutRequestViewSet, basename="payout")
 
 
+# -------- URL Patterns --------
 urlpatterns = [
     # Auth & Profile
-    path('login/', UserLoginView.as_view(), name='user-login'),
-    path('signup/customer/', CustomerSignupView.as_view(), name='signup-customer'),
-    path('seller/apply/', SellerApplicationView.as_view(), name='seller-application-create'),
-    path('profile/', UserProfileView.as_view(), name='user-profile'),
-    path('profile/update/', UserProfileUpdateView.as_view(), name='profile-update'),
-    path('forgot-password/request/', ForgotPasswordRequestView.as_view(), name='forgot-password-request'),
-    path('forgot-password/confirm/', ForgotPasswordConfirmView.as_view(), name='forgot-password-confirm'),
-    path('orders/add-shipping-address/', AddShippingAddressView.as_view(), name='add-shipping-address'),
+    path("login/", UserLoginView.as_view(), name="user-login"),
+    path("signup/customer/", CustomerSignupView.as_view(), name="signup-customer"),
+    path("seller/apply/", SellerApplicationView.as_view(), name="seller-application-create"),
+    path("profile/", UserProfileView.as_view(), name="user-profile"),
+    path("profile/update/", UserProfileUpdateView.as_view(), name="profile-update"),
+    path("forgot-password/request/", ForgotPasswordRequestView.as_view(), name="forgot-password-request"),
+    path("forgot-password/confirm/", ForgotPasswordConfirmView.as_view(), name="forgot-password-confirm"),
+
+    # Orders
+    path("orders/add-shipping-address/", AddShippingAddressView.as_view(), name="add-shipping-address"),
     path("receipt/<str:order_id>/", OrderReceiptView.as_view(), name="order-receipt"),
 
-    path('vendor/dashboard/', VendorDashboardView.as_view(), name='vendor-dashboard'),
-
-# GET /api/dashboard/vendor/sales-overview?period=7days
-# GET /api/dashboard/vendor/sales-overview?period=30days
-# GET /api/dashboard/vendor/sales-overview?period=year
-
+    # Vendor Dashboard
+    path("vendor/dashboard/", VendorDashboardView.as_view(), name="vendor-dashboard"),
     path("vendor/sales-overview/", VendorSalesOverviewView.as_view(), name="vendor-sales-overview"),
-
     path("vendor/payments-stats/", VendorPaymentsStatsView.as_view(), name="vendor-payments-stats"),
-
-    path('terms/', TermsConditionView.as_view(), name='terms-condition'),
-    path('privacy/', PrivacyPolicyView.as_view(), name='privacy-policy'),
-
     path("vendor/sales-performance/", VendorSalesPerformanceView.as_view(), name="vendor-sales-performance"),
 
-    # Stripe webhook (no trailing slash)
-    path('stripe/webhook', StripeWebhookView.as_view(), name='stripe-webhook'),
+    # Terms & Privacy
+    path("terms/", TermsConditionView.as_view(), name="terms-condition"),
+    path("privacy/", PrivacyPolicyView.as_view(), name="privacy-policy"),
 
-    # Router URLs
-    path('', include(router.urls)),
+    # Stripe webhook
+    path("stripe/webhook/", StripeWebhookView.as_view(), name="stripe-webhook"),
+
+    # Chat
+    path("list_user_chats/", chat_views.UserChatsListView.as_view(), name="list-user-chats"),
+    path("history/<int:pk>/", chat_views.ChatMessagesListView.as_view(), name="get-chat-messages"),
+    path("message/<int:pk>/delete/", chat_views.MessageDeleteView.as_view(), name="delete-message"),
+    path("message/<int:pk>/edit/", chat_views.MessageUpdateView.as_view(), name="edit-message"),
+
+    # Include router URLs
+    path("", include(router.urls)),
 ]
