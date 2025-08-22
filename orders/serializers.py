@@ -37,13 +37,37 @@ class ShippingAddressInlineSerializer(serializers.ModelSerializer):
             "flat_number": {"required": False, "allow_blank": True},
         }
 
+
+
+
+
+class ShippingAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShippingAddress
+        fields = [
+            "id",
+            "user",
+            "order",
+            "full_name",
+            "phone_number",
+            "email",
+            "street_address",
+            "landmark",
+            "apartment_name",
+            "floor_number",
+            "flat_number",
+            "city",
+            "zip_code",
+            "billing_same_as_shipping",
+        ]
+        read_only_fields = ["id", "user", "order"]
+        
+
 class ShippingAddressAttachSerializer(ShippingAddressInlineSerializer):
-    """For /orders/add-shipping-address/ endpoint (needs order_id)."""
     order_id = serializers.IntegerField(write_only=True, required=True)
 
     class Meta(ShippingAddressInlineSerializer.Meta):
         fields = ["order_id"] + ShippingAddressInlineSerializer.Meta.fields
-
 
 # -------- Order Items --------
 class OrderItemSerializer(serializers.ModelSerializer):

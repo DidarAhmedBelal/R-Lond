@@ -14,11 +14,14 @@ from orders.serializers import (
     OrderSerializer,
     CartItemSerializer,
     OrderReceiptSerializer,
+    ShippingAddressSerializer
 )
 from orders.enums import OrderStatus, DeliveryType
 from orders.utils import create_order_from_cart, create_order_for_single_product
 from products.models import Product
 from users.enums import UserRole
+from orders.models import ShippingAddress
+
 
 logger = logging.getLogger(__name__)
 
@@ -164,17 +167,51 @@ class OrderViewSet(viewsets.ModelViewSet):
         return Response(OrderSerializer(order, context={"request": request}).data, status=status.HTTP_200_OK)
 
 
+
+
+
 # -------- Shipping Address Attach --------
-class AddShippingAddressView(generics.CreateAPIView):
-    serializer_class = ShippingAddressAttachSerializer
+class ShippingAddressViewSet(viewsets.ModelViewSet):
+
     permission_classes = [permissions.IsAuthenticated]
+    serializer_class = ShippingAddressSerializer  # default serializer for listing
+
+    def get_queryset(self):
+        # Only show shipping addresses that belong to the logged-in user
+        return ShippingAddress.objects.filter(user=self.request.user).select_related("order")
+
+    def get_serializer_class(self):
+        # Use attach serializer for create action
+        if self.action == 'create':
+            return ShippingAddressAttachSerializer
+        return ShippingAddressSerializer
 
     def perform_create(self, serializer):
-        from orders.models import Order, ShippingAddress
+        # Extract order_id from validated data
         order_id = serializer.validated_data.pop("order_id")
-        order = get_object_or_404(Order, id=order_id, customer=self.request.user)
+        order = get_object_or_404(Order, id=order_id)
+
+        # Ensure the order belongs to the user
+        if order.customer != self.request.user:
+            raise PermissionDenied("You do not have permission to add a shipping address to this order.")
+
+        # Create the shipping address linked to the order and user
         ShippingAddress.objects.create(user=self.request.user, order=order, **serializer.validated_data)
+
         logger.info(f"Shipping address added to order {order.id} by user {self.request.user.id}")
+
+    # Optional: override create to return the serialized object after creation
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        # Return the full serialized address
+        instance = ShippingAddress.objects.filter(user=request.user).latest('id')
+        read_serializer = ShippingAddressSerializer(instance)
+        return Response(read_serializer.data, status=status.HTTP_201_CREATED)
+
+
 
 
 # -------- Cart ViewSet --------

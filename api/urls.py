@@ -43,12 +43,19 @@ from dashboard.views import (
     VendorPaymentsStatsView,
     VendorSalesPerformanceView,
     PayoutRequestViewSet,
+    DashboardStatsView,
+    SalesOverviewView,
+    LatestOrdersView, 
+    LowStockAlertsView,
+    VendorPerformanceViewSet,
+    FurnitureSalesComparisonView,
+    CategorySalesView
 )
 
 # Orders
 from orders.views import (
     OrderViewSet,
-    AddShippingAddressView,
+    ShippingAddressViewSet,
     CartViewSet,
     OrderReceiptView,
 )
@@ -107,6 +114,11 @@ router.register("checkout", CheckoutViewSet, basename="checkout")
 router.register("payouts", PayoutRequestViewSet, basename="payout")
 
 
+
+router.register("admin/vendor-performance", VendorPerformanceViewSet, basename="vendor-performance")
+
+router.register('shipping-addresses', ShippingAddressViewSet, basename='shipping-address')
+
 # -------- URL Patterns --------
 urlpatterns = [
     # Auth & Profile
@@ -119,7 +131,7 @@ urlpatterns = [
     path("forgot-password/confirm/", ForgotPasswordConfirmView.as_view(), name="forgot-password-confirm"),
 
     # Orders
-    path("orders/add-shipping-address/", AddShippingAddressView.as_view(), name="add-shipping-address"),
+    # path("orders/add-shipping-address/", AddShippingAddressView.as_view(), name="add-shipping-address"),
     path("receipt/<str:order_id>/", OrderReceiptView.as_view(), name="order-receipt"),
 
     # Vendor Dashboard
@@ -141,6 +153,32 @@ urlpatterns = [
     path("message/<int:pk>/delete/", chat_views.MessageDeleteView.as_view(), name="delete-message"),
     path("message/<int:pk>/edit/", chat_views.MessageUpdateView.as_view(), name="edit-message"),
 
+    path("admin/stats/", DashboardStatsView.as_view(), name="dashboard-stats"),
+
+
+
+    path("admin/sales-overview/", SalesOverviewView.as_view(), name="sales-overview"),
+
+
+    path("admin/alerts/low-stock/", LowStockAlertsView.as_view(), name="low-stock-alerts"),
+
+
+    #  http://10.10.13.16:2500/api/admin/sales-overview/?range=1y
+    #  http://10.10.13.16:2500/api/admin/sales-overview/?range=30d
+    #  http://10.10.13.16:2500/api/admin/sales-overview/?range=7d
+    
+
+
+    path("admin/latest-orders/", LatestOrdersView.as_view(), name="latest-orders"),
+
+
+    path("admin/furniture-sales-comparison/", FurnitureSalesComparisonView.as_view(), name="furniture-sales-comparison"),
+
+
+
+    path("admin/category-sales/", CategorySalesView.as_view(), name="category-sales"),
+
+    
     # Include router URLs
     path("", include(router.urls)),
 ]

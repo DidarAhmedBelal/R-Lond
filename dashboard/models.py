@@ -3,8 +3,10 @@ from django.conf import settings
 from django.utils.timezone import now
 from payments.enums import PaymentMethodEnum
 from dashboard.enums import PayoutStatusEnum
+from products.models import Product
+from users.models import User, BaseModel
 
-class PayoutRequest(models.Model):
+class PayoutRequest(BaseModel):
     vendor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -27,3 +29,18 @@ class PayoutRequest(models.Model):
 
     def __str__(self):
         return f"Payout #{self.id} - {self.vendor} - {self.amount} ({self.status})"
+
+
+
+class Alert(BaseModel):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="alerts",
+        null=True, blank=True 
+    )
+    message = models.CharField(max_length=255)
+    created_at = models.DateTimeField(default=now)
+
+    def __str__(self):
+        return self.message

@@ -15,6 +15,11 @@ from django.utils import timezone
 
 User = settings.AUTH_USER_MODEL
 
+
+
+
+
+
 class Product(BaseModel):
     vendor = models.ForeignKey(
         User,
@@ -119,6 +124,8 @@ class Product(BaseModel):
             return reverse("products:detail", args=[self.slug])
         except Exception:
             return f"/products/{self.slug}/"
+
+
 
 
 class ProductImage(BaseModel):
