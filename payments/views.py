@@ -93,8 +93,18 @@ class CheckoutViewSet(viewsets.ViewSet):
             })
 
         # Fallback URLs if settings missing
-        frontend_success = getattr(settings, "FRONTEND_PAYMENT_SUCCESS_URL", "http://localhost:5173/payments/success/")
-        frontend_cancel = getattr(settings, "FRONTEND_PAYMENT_CANCEL_URL", "http://localhost:5173/payments/cancel/")
+        frontend_success_base = getattr(
+            settings,
+            "FRONTEND_PAYMENT_SUCCESS_URL",
+            "http://localhost:5173/payments/success/"
+        )
+        frontend_cancel = getattr(
+            settings,
+            "FRONTEND_PAYMENT_CANCEL_URL",
+            "http://localhost:5173/payments/cancel/"
+        )
+
+        frontend_success = f"{frontend_success_base}?order_id={order.order_id}"
 
         try:
             session = stripe.checkout.Session.create(
@@ -113,7 +123,7 @@ class CheckoutViewSet(viewsets.ViewSet):
 
             response_data = {
                 "checkout_url": session.url,
-                "order_id": order.order_id,
+                "order_id": order.order_id, 
                 "total_amount": str(order.total_amount),
                 "item_count": order.items.count(),
                 "items": items_data,
@@ -134,9 +144,6 @@ class CheckoutViewSet(viewsets.ViewSet):
         except Exception as e:
             logger.error(f"Stripe session creation failed: {e}", exc_info=True)
             return Response({"error": "Failed to create checkout session"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-
 
 
 

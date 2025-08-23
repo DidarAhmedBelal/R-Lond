@@ -6,7 +6,7 @@ from rest_framework import viewsets, generics, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.exceptions import PermissionDenied, NotFound
-
+from notification.utils import send_notification_to_user
 from orders.models import Order, CartItem
 from orders.serializers import (
     ShippingAddressAttachSerializer,
@@ -48,6 +48,8 @@ class IsVendorOrAdminOrCustomer(permissions.BasePermission):
 
 
 
+# order/views.py
+from notification.utils import send_notification_to_user
 
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
@@ -55,7 +57,6 @@ class OrderViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-
         if getattr(user, 'role', None) == UserRole.ADMIN.value or getattr(user, 'is_staff', False):
             queryset = Order.objects.all()
         elif getattr(user, 'role', None) == UserRole.VENDOR.value:
@@ -64,7 +65,6 @@ class OrderViewSet(viewsets.ModelViewSet):
             queryset = Order.objects.filter(customer=user)
         else:
             return Order.objects.none()
-
         # Filters
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
@@ -107,8 +107,6 @@ class OrderViewSet(viewsets.ModelViewSet):
                 payment_method=request.data.get("payment_method"),
                 notes=request.data.get("notes"),
             )
-
-            # Ensure orders is always a list
             if not isinstance(orders, list):
                 orders = [orders]
 
@@ -119,6 +117,23 @@ class OrderViewSet(viewsets.ModelViewSet):
                 for order in orders:
                     order.selected_shipping_address = address
                     order.save(update_fields=["selected_shipping_address"])
+
+            # for order in orders:
+            #     # Customer notify
+            #     send_notification_to_user(
+            #         user=request.user,
+            #         message=f"Your order #{order.id} has been created successfully.",
+            #         sender=request.user,
+            #         meta_data={"order_id": order.id, "order_status": "created"}
+            #     )
+            #     # Vendor notify
+            #     if order.vendor:
+            #         send_notification_to_user(
+            #             user=order.vendor,
+            #             message=f"You have received a new order #{order.id}.",
+            #             sender=request.user,
+            #             meta_data={"order_id": order.id, "order_status": "created"}
+            #         )
 
             return Response(
                 OrderSerializer(orders, many=True, context={"request": request}).data,
@@ -164,18 +179,40 @@ class OrderViewSet(viewsets.ModelViewSet):
                 payment_method=request.data.get("payment_method"),
                 notes=request.data.get("notes"),
             )
-
-            # attach selected shipping if provided
             addr_id = request.data.get("selected_shipping_address_id")
             if addr_id:
                 address = get_object_or_404(ShippingAddress, id=addr_id, user=request.user)
                 order.selected_shipping_address = address
                 order.save(update_fields=["selected_shipping_address"])
 
+            # # Customer notify
+            # send_notification_to_user(
+            #     user=request.user,
+            #     message=f"Your order #{order.id} for {product.name} has been created successfully.",
+            #     sender=request.user,
+            #     meta_data={"order_id": order.id, "order_status": "created"}
+            # )
+            # # Vendor notify
+            # if order.vendor:
+            #     send_notification_to_user(
+            #         user=order.vendor,
+            #         message=f"You have received a new order #{order.id} for {product.name}.",
+            #         sender=request.user,
+            #         meta_data={"order_id": order.id, "order_status": "created"}
+            #     )
+
             return Response(OrderSerializer(order, context={"request": request}).data,
                             status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+
+
+
+
 
 
 

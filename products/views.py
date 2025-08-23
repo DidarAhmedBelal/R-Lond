@@ -31,6 +31,7 @@ from products.serializers import PromotionSerializer,VendorProductSerializer
 from products.models import ReturnProduct
 from products.serializers import ReturnProductSerializer
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from notification.utils import send_notification_to_user
 
 
 class IsVendorOrAdmin(BasePermission):
@@ -52,80 +53,7 @@ class IsVendorOrAdmin(BasePermission):
     
 
 
-# class ProductViewSet(viewsets.ModelViewSet):
-#     serializer_class = ProductSerializer
-#     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsVendorOrAdmin]
 
-#     def get_queryset(self):
-#         qs = Product.objects.select_related("seo", "vendor").prefetch_related(
-#             "categories", "tags", "images"
-#         )
-#         user = self.request.user
-
-#         if user.is_authenticated:
-#             if user.is_staff or user.is_superuser:
-#                 return qs
-            
-#             if getattr(user, "role", None) == "vendor":
-#                 return qs.filter(vendor=user)
-
-#         return qs.filter(
-#             is_active=True,
-#             status=ProductStatus.APPROVED.value
-#         )
-
-
-#     def perform_create(self, serializer):
-#         user = self.request.user
-
-#         if not (user.is_staff or getattr(user, "role", None) in [UserRole.ADMIN.value, UserRole.VENDOR.value]):
-#             raise PermissionDenied("Only vendors or admins can add products.")
-
-#         seo_data = self.request.data.get("seo")
-#         seo_obj = None
-
-#         if isinstance(seo_data, dict):
-#             seo_obj = SEO.objects.create(**seo_data)
-#         elif seo_data:
-#             try:
-#                 seo_obj = SEO.objects.get(pk=seo_data)
-#             except SEO.DoesNotExist:
-#                 raise serializers.ValidationError({"seo": "SEO object not found."})
-
-#         if getattr(user, "role", None) == UserRole.ADMIN.value or user.is_staff:
-#             serializer.save(vendor=user, seo=seo_obj, status=ProductStatus.APPROVED)
-#         elif getattr(user, "role", None) == UserRole.VENDOR.value:
-#             serializer.save(vendor=user, seo=seo_obj, status=ProductStatus.PENDING)
-
-#     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
-#     def accept(self, request, pk=None):
-#         product = self.get_object()
-#         if product.status not in [ProductStatus.PENDING.value]:
-#             return Response({"detail": "Only pending products can be reviewed."}, status=status.HTTP_400_BAD_REQUEST)
-
-#         if product.status == ProductStatus.APPROVED.value:
-#             return Response({"detail": "Product already approved."}, status=status.HTTP_400_BAD_REQUEST)
-        
-#         product.status = ProductStatus.APPROVED.value
-#         product.is_active = True  
-#         product.save()
-#         return Response({
-#             "detail": "Product approved.",
-#             "product": self.get_serializer(product).data
-#         }, status=status.HTTP_200_OK)
-
-#     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
-#     def reject(self, request, pk=None):
-#         product = self.get_object()
-#         if product.status == ProductStatus.REJECTED.value:
-#             return Response({"detail": "Product already rejected."}, status=status.HTTP_400_BAD_REQUEST)
-#         product.status = ProductStatus.REJECTED.value
-#         product.is_active = False 
-#         product.save()
-#         return Response({
-#             "detail": "Product rejected.",
-#             "product": self.get_serializer(product).data
-#         }, status=status.HTTP_200_OK)
 
 
 
@@ -172,7 +100,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         elif getattr(user, "role", None) == UserRole.VENDOR.value:
             serializer.save(vendor=user, seo=seo_obj, status=ProductStatus.PENDING)
 
-    
+    # ---------- Approve ----------
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def accept(self, request, pk=None):
         product = self.get_object()
@@ -181,23 +109,43 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         if product.status == ProductStatus.APPROVED.value:
             return Response({"detail": "Product already approved."}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         product.status = ProductStatus.APPROVED.value
         product.is_active = True  
         product.save()
+
+        # if product.vendor:
+        #     send_notification_to_user(
+        #         user=product.vendor,
+        #         message=f"Your product '{product.name}' has been approved!!",
+        #         sender=request.user,
+        #         meta_data={"product_id": product.id, "status": "approved"}
+        #     )
+
         return Response({
             "detail": "Product approved.",
             "product": self.get_serializer(product).data
         }, status=status.HTTP_200_OK)
 
+    # ---------- Reject ----------
     @action(detail=True, methods=['post'], permission_classes=[IsAdminUser])
     def reject(self, request, pk=None):
         product = self.get_object()
         if product.status == ProductStatus.REJECTED.value:
             return Response({"detail": "Product already rejected."}, status=status.HTTP_400_BAD_REQUEST)
+
         product.status = ProductStatus.REJECTED.value
         product.is_active = False 
         product.save()
+
+        if product.vendor:
+            send_notification_to_user(
+                user=product.vendor,
+                message=f"Your product '{product.name}' has been rejected ",
+                sender=request.user,
+                meta_data={"product_id": product.id, "status": "rejected"}
+            )
+
         return Response({
             "detail": "Product rejected.",
             "product": self.get_serializer(product).data

@@ -101,7 +101,6 @@ class UserChatsListView(APIView):
                 "user_email": chat.user_email,
                 "username": chat.username,
                 "id": chat.user_id,
-                # "full_name": chat.agency_name or chat.company_name or chat.username or chat.user_email.split('@')[0],
                 "user_image": f"{settings.MEDIA_URL}{chat.user_image}" if chat.user_image else None,
                 "name": chat.agency_name or chat.company_name or chat.username or chat.user_email.split('@')[0]
             } for chat in qs
@@ -199,3 +198,5 @@ class MessageListCreateView(generics.ListCreateAPIView):
         receiver_id = self.kwargs.get('pk')
         receiver = get_object_or_404(User, pk=receiver_id)
         serializer.save(sender=self.request.user, receiver=receiver)
+
+
