@@ -33,6 +33,11 @@ class UserSerializer(serializers.ModelSerializer):
             'date_of_birth', 'national_id', 'role'
         ]
 
+
+
+
+        
+
 class UserSignupSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(write_only=True)
     agree_to_terms = serializers.BooleanField(write_only=True)

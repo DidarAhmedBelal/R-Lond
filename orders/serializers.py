@@ -6,7 +6,7 @@ from products.serializers import ProductSerializer
 from .models import Order, OrderItem, ShippingAddress, CartItem
 from orders.enums import DeliveryType
 from products.enums import ProductStatus
-
+from users.serializers import UserSerializer
 
 
 
@@ -104,8 +104,9 @@ class OrderSerializer(serializers.ModelSerializer):
         required=False
     )
 
-    customer_name = serializers.CharField(source="customer.get_full_name", read_only=True)
-    vendor_name = serializers.CharField(source="vendor.get_full_name", read_only=True)
+    # Full nested info
+    customer = UserSerializer(read_only=True)
+    vendor = UserSerializer(read_only=True)
 
     order_status_display = serializers.CharField(source="get_order_status_display", read_only=True)
     payment_status_display = serializers.CharField(source="get_payment_status_display", read_only=True)
@@ -115,8 +116,7 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             "id", "order_id",
-            "customer", "customer_name",
-            "vendor", "vendor_name",
+            "customer", "vendor",    
             "subtotal", "discount_amount", "promo_code",
             "tax_amount", "delivery_fee", "total_amount",
             "delivery_type", "delivery_type_display",
@@ -126,11 +126,13 @@ class OrderSerializer(serializers.ModelSerializer):
             "order_status", "order_status_display",
             "order_date", "item_count", "notes",
             "items",
+            "created_at", "updated_at",   # 👈 BaseModel fields
         ]
         read_only_fields = [
             "order_id", "order_date", "items",
             "subtotal", "tax_amount", "delivery_fee", "total_amount",
             "item_count", "order_status", "payment_status",
+            "created_at", "updated_at",
         ]
 
     def validate_selected_shipping_address(self, value):

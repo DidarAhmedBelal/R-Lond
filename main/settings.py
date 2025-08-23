@@ -103,6 +103,7 @@ INSTALLED_APPS = [
     'dashboard',
     'terms',
     'chat',
+    'notification',
 ]
 
 

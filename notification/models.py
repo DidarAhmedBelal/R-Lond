@@ -1,6 +1,6 @@
 from django.db import models
 from django.conf import settings
-from user.models import User
+from users.models import User
 from django.db.models import JSONField
 
 

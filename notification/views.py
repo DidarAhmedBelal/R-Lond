@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from rest_framework.permissions import AllowAny
-from user.models import User
+from users.models import User
 from .models import Notification
 from .serializers import NotificationSerializer
 from .utils import send_notification_to_user

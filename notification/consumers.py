@@ -1,6 +1,6 @@
 import json
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from user.models import User
+from users.models import User
 from .models import Notification
 from .serializers import NotificationSerializer
 from channels.db import database_sync_to_async
@@ -47,6 +47,7 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
                     "notification": notification_data
                 }
             )
+
 
     async def send_notification(self, event):
         notification_data = event.get('notification', {})
