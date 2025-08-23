@@ -24,7 +24,8 @@ from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser
-
+from django.utils.timezone import now
+from datetime import date
 from orders.models import Order, OrderItem
 from users.models import User
 from products.models import Product, ReturnProduct
@@ -37,7 +38,7 @@ from dashboard.serializers import VendorPerformanceSerializer
 from django.db.models.functions import Coalesce
 from django.db.models import DecimalField
 from calendar import month_name
-
+from products.views import IsVendorOrAdmin
 
 
 
@@ -897,3 +898,59 @@ class CategorySalesView(APIView):
         ]
 
         return Response(result)
+
+
+
+
+
+class TopSellProductGraphView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        user = request.user
+        today = date.today()
+        start_of_month = today.replace(day=1)
+
+        delivered_items = OrderItem.objects.filter(
+            Q(status=OrderStatus.DELIVERED.value) | Q(order__order_status=OrderStatus.DELIVERED.value),
+            order__order_date__date__gte=start_of_month,
+            order__order_date__date__lte=today
+        )
+
+        if hasattr(user, "role") and user.role == UserRole.VENDOR.value:
+            delivered_items = delivered_items.filter(product__vendor=user)
+
+        debug_rows = delivered_items.values(
+            "id", "status", "order__order_status", "product__name", "quantity"
+        )
+        print("🔍 Delivered Items Debug:", list(debug_rows))
+
+        top_products = (
+            delivered_items
+            .values("product_id", "product__name")
+            .annotate(total_quantity_sold=Sum("quantity"))
+            .order_by("-total_quantity_sold")
+        )
+
+        total_quantity = sum(item["total_quantity_sold"] for item in top_products) or 1
+        product_list = [
+            {
+                "id": item["product_id"],
+                "name": item["product__name"],
+                "total_quantity_sold": item["total_quantity_sold"],
+                "percentage": round((item["total_quantity_sold"] / total_quantity) * 100, 2)
+            }
+            for item in top_products
+        ]
+
+        return Response({
+            "labels": [item["product__name"] for item in top_products],
+            "data": [item["total_quantity_sold"] for item in top_products],
+            "products": product_list
+        })
+
+
+
+
+
+

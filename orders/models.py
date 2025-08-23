@@ -32,6 +32,10 @@ class Order(BaseModel):
         limit_choices_to={"role": "vendor"},
     )
     products = models.ManyToManyField(Product, through="OrderItem")
+    
+    selected_shipping_address = models.ForeignKey(
+        "ShippingAddress", on_delete=models.SET_NULL, null=True, blank=True, related_name='+'
+    )
 
     # Monetary details
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"))
@@ -170,7 +174,7 @@ class CartItem(BaseModel):
 # -----------------------------
 class ShippingAddress(BaseModel):
     user = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name="shipping_addresses")
-    order = models.ForeignKey(Order, null=True, blank=True, on_delete=models.CASCADE, related_name="shipping_addresses")
+    order = models.ForeignKey(Order, related_name="shipping_addresses", null=True, blank=True, on_delete=models.CASCADE)
     full_name = models.CharField(max_length=255)
     phone_number = models.CharField(max_length=30)
     email = models.EmailField(blank=True, null=True)

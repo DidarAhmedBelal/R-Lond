@@ -274,44 +274,49 @@ class StandardResultsSetPagination(PageNumberPagination):
 
 
 
+
+
 class TopSellProductViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [IsVendorOrAdmin]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'is_active', 'vendor']
     search_fields = ['name', 'sku', 'categories__name', 'tags__name']
-    ordering_fields = ['price1', 'price2', 'price3', 'total_quantity_sold', 'total_discount', 'created_at']
+    ordering_fields = [
+        'price1', 'price2', 'price3',
+        'total_quantity_sold', 'total_discount', 'created_at'
+    ]
     ordering = ['-total_quantity_sold']
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         user = self.request.user
 
-        # Delivered order items
-        delivered_items = OrderItem.objects.filter(order__order_status=OrderStatus.DELIVERED.value)
+        delivered_items = OrderItem.objects.filter(
+            order__order_status=OrderStatus.DELIVERED.value
+        )
 
-        # If vendor, only include their own products
         if user.role == UserRole.VENDOR.value:
             delivered_items = delivered_items.filter(product__vendor=user)
 
-        # Aggregate total sold quantities
         top_products = delivered_items.values('product').annotate(
             total_quantity_sold=Sum('quantity')
         ).order_by('-total_quantity_sold')
 
         product_ids = [item['product'] for item in top_products]
 
-        # Filter products based on aggregated IDs
         products_qs = Product.objects.filter(id__in=product_ids)
 
-        # Preserve order based on total_quantity_sold
-        preserved_order = Case(*[When(pk=pk, then=pos) for pos, pk in enumerate(product_ids)])
+        preserved_order = Case(
+            *[When(pk=pk, then=pos) for pos, pk in enumerate(product_ids)]
+        )
 
-        # Annotate products with total_quantity_sold using a subquery
         subquery = OrderItem.objects.filter(
             order__order_status=OrderStatus.DELIVERED.value,
             product=OuterRef('pk')
-        ).values('product').annotate(total_qty=Sum('quantity')).values('total_qty')
+        ).values('product').annotate(
+            total_qty=Sum('quantity')
+        ).values('total_qty')
 
         products = products_qs.annotate(
             total_quantity_sold=Subquery(subquery, output_field=IntegerField())
@@ -329,6 +334,9 @@ class TopSellProductViewSet(viewsets.ReadOnlyModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+
+
 
 
 
@@ -465,3 +473,12 @@ class ReturnProductViewSet(viewsets.ModelViewSet):
             )
 
         serializer.save(requested_by=user)
+
+
+
+
+
+
+
+
+

@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
+
+
+
+
+
 class CheckoutViewSet(viewsets.ViewSet):
     """Stripe checkout for existing orders (cart or single product)."""
     permission_classes = [permissions.IsAuthenticated]
@@ -30,6 +35,8 @@ class CheckoutViewSet(viewsets.ViewSet):
         order = get_object_or_404(Order, order_id=order_id, customer=request.user)
         return self.create_stripe_session(order, request.user)
     
+
+
 
             
     def create_stripe_session(self, order, user):
@@ -67,21 +74,22 @@ class CheckoutViewSet(viewsets.ViewSet):
             })
 
         # Shipping addresses
+        shipping_address = order.selected_shipping_address
         shipping_addresses_data = []
-        for addr in order.shipping_addresses.all():  # related_name
+        if shipping_address:
             shipping_addresses_data.append({
-                "id": addr.id,
-                "full_name": addr.full_name,
-                "phone_number": addr.phone_number,
-                "email": addr.email,
-                "street_address": addr.street_address,
-                "landmark": addr.landmark,
-                "apartment_name": addr.apartment_name,
-                "floor_number": addr.floor_number,
-                "flat_number": addr.flat_number,
-                "city": addr.city,
-                "zip_code": addr.zip_code,
-                "billing_same_as_shipping": addr.billing_same_as_shipping,
+                "id": shipping_address.id,
+                "full_name": shipping_address.full_name,
+                "phone_number": shipping_address.phone_number,
+                "email": shipping_address.email,
+                "street_address": shipping_address.street_address,
+                "landmark": shipping_address.landmark,
+                "apartment_name": shipping_address.apartment_name,
+                "floor_number": shipping_address.floor_number,
+                "flat_number": shipping_address.flat_number,
+                "city": shipping_address.city,
+                "zip_code": shipping_address.zip_code,
+                "billing_same_as_shipping": shipping_address.billing_same_as_shipping,
             })
 
         # Fallback URLs if settings missing
@@ -126,6 +134,11 @@ class CheckoutViewSet(viewsets.ViewSet):
         except Exception as e:
             logger.error(f"Stripe session creation failed: {e}", exc_info=True)
             return Response({"error": "Failed to create checkout session"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
+
+
 
 
 class StripeWebhookView(APIView):

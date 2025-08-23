@@ -49,7 +49,8 @@ from dashboard.views import (
     LowStockAlertsView,
     VendorPerformanceViewSet,
     FurnitureSalesComparisonView,
-    CategorySalesView
+    CategorySalesView,
+    TopSellProductGraphView,
 )
 
 # Orders
@@ -58,6 +59,7 @@ from orders.views import (
     ShippingAddressViewSet,
     CartViewSet,
     OrderReceiptView,
+    OrderItemViewSet
 )
 
 # Payments
@@ -106,6 +108,9 @@ router.register("vendors", VendorListViewSet, basename="vendors")
 router.register("orders", OrderViewSet, basename="order")
 router.register("cart", CartViewSet, basename="cart")
 router.register("vendor/order/list", OrderManagementViewSet, basename="order-manage")
+router.register("order-items", OrderItemViewSet, basename="order-item")
+
+
 
 # Checkout (Stripe)
 router.register("checkout", CheckoutViewSet, basename="checkout")
@@ -154,10 +159,11 @@ urlpatterns = [
     path("message/<int:pk>/edit/", chat_views.MessageUpdateView.as_view(), name="edit-message"),
 
     path("admin/stats/", DashboardStatsView.as_view(), name="dashboard-stats"),
+    path("admin/top/sell/products/", TopSellProductGraphView.as_view(), name="sell-product-graph"),
 
 
 
-    path("admin/sales-overview/", SalesOverviewView.as_view(), name="sales-overview"),
+    path("top-sell-products/", TopSellProductGraphView.as_view(), name="sell-product-graph"),
 
 
     path("admin/alerts/low-stock/", LowStockAlertsView.as_view(), name="low-stock-alerts"),

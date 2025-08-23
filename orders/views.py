@@ -39,7 +39,18 @@ class IsVendorOrAdminOrCustomer(permissions.BasePermission):
         return obj.customer == request.user
 
 
-# -------- Order ViewSet --------
+
+
+
+
+
+
+
+
+
+
+
+
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [permissions.IsAuthenticated, IsVendorOrAdminOrCustomer]
@@ -56,6 +67,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         else:
             return Order.objects.none()
 
+        # filters
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         if start_date and end_date:
@@ -70,18 +82,21 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         return queryset.order_by('-order_date')
 
-
     def perform_create(self, serializer):
         if getattr(self.request.user, "role", None) != UserRole.VENDOR.value:
             raise PermissionDenied("Only vendors can manually create orders.")
-        instance = serializer.save(vendor=self.request.user, order_status=OrderStatus.PENDING.value)
-        logger.info(f"Order {instance.order_id} created by vendor {self.request.user.id}")
+        serializer.save(vendor=self.request.user, order_status=OrderStatus.PENDING.value)
 
     def perform_update(self, serializer):
-        instance = serializer.save()
-        logger.info(f"Order {instance.order_id} updated with status {instance.order_status}")
+        serializer.save()
 
-    # ---------- Cart Order Creation (NO shipping here) ----------
+
+
+
+
+
+
+    # ---------- Cart Order ----------
     @action(detail=False, methods=["post"], url_path="create-from-cart")
     def create_from_cart_action(self, request):
         delivery_type = request.data.get("delivery_type", DeliveryType.STANDARD.value)
@@ -100,12 +115,26 @@ class OrderViewSet(viewsets.ModelViewSet):
                 payment_method=request.data.get("payment_method"),
                 notes=request.data.get("notes"),
             )
+
+            # attach selected shipping if provided
+            addr_id = request.data.get("selected_shipping_address_id")
+            if addr_id:
+                address = get_object_or_404(ShippingAddress, id=addr_id, user=request.user)
+                order.selected_shipping_address = address
+                order.save(update_fields=["selected_shipping_address"])
+
             return Response(OrderSerializer(order, context={"request": request}).data,
                             status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ---------- Single Product (optional shipping provided) ----------
+
+
+
+
+
+
+    # ---------- Single Product ----------
     @action(detail=False, methods=["post"], url_path="create-single")
     def create_single_action(self, request):
         product_id = request.data.get("product_id")
@@ -143,73 +172,84 @@ class OrderViewSet(viewsets.ModelViewSet):
                 notes=request.data.get("notes"),
             )
 
-            # OPTIONAL: if client sent shipping_data, attach now
-            shipping_data = request.data.get("shipping_data")
-            if shipping_data:
-                s = ShippingAddressInlineSerializer(data=shipping_data)
-                s.is_valid(raise_exception=True)
-                ShippingAddress = order.shipping_addresses.model
-                ShippingAddress.objects.create(order=order, **s.validated_data)
+            # attach selected shipping if provided
+            addr_id = request.data.get("selected_shipping_address_id")
+            if addr_id:
+                address = get_object_or_404(ShippingAddress, id=addr_id, user=request.user)
+                order.selected_shipping_address = address
+                order.save(update_fields=["selected_shipping_address"])
 
             return Response(OrderSerializer(order, context={"request": request}).data,
                             status=status.HTTP_201_CREATED)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ---------- Payment Success (manual) ----------
-    @action(detail=True, methods=["post"], url_path="payment-success")
-    def payment_success(self, request, pk=None):
-        order = get_object_or_404(Order, pk=pk, customer=request.user)
-        order.payment_status = OrderStatus.PAID.value
-        order.order_status = OrderStatus.PROCESSING.value
-        order.delivery_date = timezone.now()
-        order.save(update_fields=["payment_status", "order_status", "delivery_date"])
-        return Response(OrderSerializer(order, context={"request": request}).data, status=status.HTTP_200_OK)
+
+
+
 
 
 
 
 
 # -------- Shipping Address Attach --------
-class ShippingAddressViewSet(viewsets.ModelViewSet):
+# class ShippingAddressViewSet(viewsets.ModelViewSet):
 
+#     permission_classes = [permissions.IsAuthenticated]
+#     serializer_class = ShippingAddressSerializer  # default serializer for listing
+
+#     def get_queryset(self):
+#         # Only show shipping addresses that belong to the logged-in user
+#         return ShippingAddress.objects.filter(user=self.request.user).select_related("order")
+
+#     def get_serializer_class(self):
+#         # Use attach serializer for create action
+#         if self.action == 'create':
+#             return ShippingAddressAttachSerializer
+#         return ShippingAddressSerializer
+
+#     def perform_create(self, serializer):
+#         # Extract order_id from validated data
+#         order_id = serializer.validated_data.pop("order_id")
+#         order = get_object_or_404(Order, id=order_id)
+
+#         # Ensure the order belongs to the user
+#         if order.customer != self.request.user:
+#             raise PermissionDenied("You do not have permission to add a shipping address to this order.")
+
+#         # Create the shipping address linked to the order and user
+#         ShippingAddress.objects.create(user=self.request.user, order=order, **serializer.validated_data)
+
+#         logger.info(f"Shipping address added to order {order.id} by user {self.request.user.id}")
+
+#     # Optional: override create to return the serialized object after creation
+#     def create(self, request, *args, **kwargs):
+#         serializer = self.get_serializer(data=request.data)
+#         serializer.is_valid(raise_exception=True)
+#         self.perform_create(serializer)
+
+#         # Return the full serialized address
+#         instance = ShippingAddress.objects.filter(user=request.user).latest('id')
+#         read_serializer = ShippingAddressSerializer(instance)
+#         return Response(read_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class ShippingAddressViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
-    serializer_class = ShippingAddressSerializer  # default serializer for listing
+    serializer_class = ShippingAddressSerializer
 
     def get_queryset(self):
-        # Only show shipping addresses that belong to the logged-in user
-        return ShippingAddress.objects.filter(user=self.request.user).select_related("order")
-
-    def get_serializer_class(self):
-        # Use attach serializer for create action
-        if self.action == 'create':
-            return ShippingAddressAttachSerializer
-        return ShippingAddressSerializer
+        return ShippingAddress.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        # Extract order_id from validated data
-        order_id = serializer.validated_data.pop("order_id")
-        order = get_object_or_404(Order, id=order_id)
+        serializer.save(user=self.request.user)
 
-        # Ensure the order belongs to the user
-        if order.customer != self.request.user:
-            raise PermissionDenied("You do not have permission to add a shipping address to this order.")
 
-        # Create the shipping address linked to the order and user
-        ShippingAddress.objects.create(user=self.request.user, order=order, **serializer.validated_data)
 
-        logger.info(f"Shipping address added to order {order.id} by user {self.request.user.id}")
 
-    # Optional: override create to return the serialized object after creation
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
 
-        # Return the full serialized address
-        instance = ShippingAddress.objects.filter(user=request.user).latest('id')
-        read_serializer = ShippingAddressSerializer(instance)
-        return Response(read_serializer.data, status=status.HTTP_201_CREATED)
+
+
 
 
 
@@ -284,3 +324,32 @@ class OrderReceiptView(generics.RetrieveAPIView):
             return self.get_queryset().get(order_id=order_id)
         except Order.DoesNotExist:
             raise NotFound("Receipt not found for this order.")
+
+
+
+
+
+from orders.serializers import OrderItemSerializer
+from orders.models import OrderItem
+from rest_framework import viewsets, permissions
+
+class OrderItemViewSet(viewsets.ModelViewSet):
+    serializer_class = OrderItemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+
+        queryset = OrderItem.objects.filter(status=OrderStatus.DELIVERED.value)
+
+        if getattr(user, "role", None) == UserRole.ADMIN.value:
+            return queryset
+        if getattr(user, "role", None) == UserRole.VENDOR.value:
+            return queryset.filter(product__vendor=user)
+        if getattr(user, "role", None) == UserRole.CUSTOMER.value:
+            return queryset.filter(order__customer=user)
+
+        return queryset.none()
+
+    def perform_create(self, serializer):
+        serializer.save()

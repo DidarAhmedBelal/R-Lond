@@ -7,9 +7,16 @@ from .models import Order, OrderItem, ShippingAddress, CartItem
 from orders.enums import DeliveryType
 from products.enums import ProductStatus
 
+
+
+
+
+
+
+
+
 # -------- Shipping Address Serializers --------
 class ShippingAddressInlineSerializer(serializers.ModelSerializer):
-    """For nesting inside other serializers (no order_id)."""
     class Meta:
         model = ShippingAddress
         fields = [
@@ -47,7 +54,6 @@ class ShippingAddressSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "user",
-            "order",
             "full_name",
             "phone_number",
             "email",
@@ -60,14 +66,16 @@ class ShippingAddressSerializer(serializers.ModelSerializer):
             "zip_code",
             "billing_same_as_shipping",
         ]
-        read_only_fields = ["id", "user", "order"]
-        
+        read_only_fields = ["id", "user"]
+
 
 class ShippingAddressAttachSerializer(ShippingAddressInlineSerializer):
     order_id = serializers.IntegerField(write_only=True, required=True)
 
     class Meta(ShippingAddressInlineSerializer.Meta):
         fields = ["order_id"] + ShippingAddressInlineSerializer.Meta.fields
+
+
 
 # -------- Order Items --------
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -77,17 +85,31 @@ class OrderItemSerializer(serializers.ModelSerializer):
         fields = ["id", "product", "quantity", "price"]
 
 
-# -------- Order (Read Serializer) --------
+
+
+
+
+# -------- Order Serializer --------
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
-    shipping_addresses = ShippingAddressInlineSerializer(many=True, read_only=True)
+
+    # Nested read-only selected shipping address
+    selected_shipping_address = ShippingAddressInlineSerializer(read_only=True)
+
+    # Write-only for create/update
+    selected_shipping_address_id = serializers.PrimaryKeyRelatedField(
+        source="selected_shipping_address",
+        queryset=ShippingAddress.objects.none(),
+        write_only=True,
+        required=False
+    )
 
     customer_name = serializers.CharField(source="customer.get_full_name", read_only=True)
-    vendor_name   = serializers.CharField(source="vendor.get_full_name", read_only=True)
+    vendor_name = serializers.CharField(source="vendor.get_full_name", read_only=True)
 
-    order_status_display   = serializers.CharField(source="get_order_status_display", read_only=True)
+    order_status_display = serializers.CharField(source="get_order_status_display", read_only=True)
     payment_status_display = serializers.CharField(source="get_payment_status_display", read_only=True)
-    delivery_type_display  = serializers.CharField(source="get_delivery_type_display",  read_only=True)
+    delivery_type_display = serializers.CharField(source="get_delivery_type_display", read_only=True)
 
     class Meta:
         model = Order
@@ -95,30 +117,38 @@ class OrderSerializer(serializers.ModelSerializer):
             "id", "order_id",
             "customer", "customer_name",
             "vendor", "vendor_name",
-
-            # Monetary
             "subtotal", "discount_amount", "promo_code",
             "tax_amount", "delivery_fee", "total_amount",
-
-            # Delivery
             "delivery_type", "delivery_type_display",
             "delivery_instructions", "estimated_delivery", "delivery_date",
-
-            # Status
+            "selected_shipping_address", "selected_shipping_address_id",
             "payment_method", "payment_status", "payment_status_display",
             "order_status", "order_status_display",
-
-            # Other
             "order_date", "item_count", "notes",
-
-            # Related
-            "items", "shipping_addresses",
+            "items",
         ]
         read_only_fields = [
             "order_id", "order_date", "items",
             "subtotal", "tax_amount", "delivery_fee", "total_amount",
             "item_count", "order_status", "payment_status",
         ]
+
+    def validate_selected_shipping_address(self, value):
+        user = self.context["request"].user
+        if value and value.user != user:
+            raise serializers.ValidationError("This shipping address does not belong to you.")
+        return value
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            self.fields["selected_shipping_address_id"].queryset = ShippingAddress.objects.filter(
+                user=request.user
+            )
+
+
+
 
 
 # -------- Cart --------
@@ -161,10 +191,10 @@ class ReceiptOrderItemSerializer(serializers.ModelSerializer):
         model = OrderItem
         fields = ["product_name", "quantity", "price"]
 
-
 class OrderReceiptSerializer(serializers.ModelSerializer):
     items = ReceiptOrderItemSerializer(many=True, read_only=True)
-    shipping_address = serializers.SerializerMethodField()
+    shipping_address = ShippingAddressInlineSerializer(source="selected_shipping_address", read_only=True)
+
     customer_name = serializers.CharField(source="customer.get_full_name", read_only=True)
     vendor_name   = serializers.CharField(source="vendor.get_full_name",   read_only=True)
     order_status_display   = serializers.CharField(source="get_order_status_display", read_only=True)
@@ -181,22 +211,6 @@ class OrderReceiptSerializer(serializers.ModelSerializer):
             "payment_method", "shipping_address",
         ]
 
-    def get_shipping_address(self, obj):
-        shipping = obj.shipping_addresses.first()
-        if shipping:
-            return {
-                "full_name": shipping.full_name,
-                "phone_number": shipping.phone_number,
-                "street_address": shipping.street_address,
-                "city": shipping.city,
-                "zip_code": shipping.zip_code,
-            }
-        # Fallback to User profile
-        user = obj.customer
-        return {
-            "full_name": user.get_full_name() or "",
-            "phone_number": getattr(user, "phone_number", "") or "",
-            "street_address": getattr(user, "address", "") or "",
-            "city": getattr(user, "city", "") or "",
-            "zip_code": getattr(user, "zip_code", "") or "",
-        }
+
+
+
