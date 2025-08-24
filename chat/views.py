@@ -17,7 +17,7 @@ from users.models import User
 from .models import Message, Chat
 from .serializers import MessageSerializer, ChatSerializer
 
-# from notification.utils import send_notification_to_user
+from notification.utils import send_notification_to_user
 
 
 class ChatMessagesListView(generics.ListAPIView):
@@ -101,6 +101,7 @@ class UserChatsListView(APIView):
                 "user_email": chat.user_email,
                 "username": chat.username,
                 "id": chat.user_id,
+                # "full_name": chat.agency_name or chat.company_name or chat.username or chat.user_email.split('@')[0],
                 "user_image": f"{settings.MEDIA_URL}{chat.user_image}" if chat.user_image else None,
                 "name": chat.agency_name or chat.company_name or chat.username or chat.user_email.split('@')[0]
             } for chat in qs
@@ -198,5 +199,3 @@ class MessageListCreateView(generics.ListCreateAPIView):
         receiver_id = self.kwargs.get('pk')
         receiver = get_object_or_404(User, pk=receiver_id)
         serializer.save(sender=self.request.user, receiver=receiver)
-
-

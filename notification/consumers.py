@@ -73,9 +73,6 @@ class NotificationConsumer(AsyncJsonWebsocketConsumer):
         return User.objects.get(id=self.user.id)
 
     def prepare_meta_data(self, message, base_meta_data=None):
-        """
-        Only supports chat, order, general
-        """
         meta_data = base_meta_data or {}
         message_upper = message.upper()
 

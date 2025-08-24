@@ -8,7 +8,7 @@ class MessageSerializer(serializers.ModelSerializer):
     attachment = serializers.CharField(write_only=True, required=False, allow_blank=True)
     attachment_name = serializers.CharField(required=False, allow_blank=True)
     mime_type = serializers.CharField(required=False, allow_blank=True)
-    message_type = serializers.CharField(read_only=True)  # Add message_type field
+    message_type = serializers.CharField(read_only=True) 
     attachment_url = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
@@ -16,8 +16,7 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sender', 'receiver', 'message', 'timestamp', 'reply_to',
             'attachment', 'attachment_name', 'mime_type', 'message_type',
-            'attachment_url',
-            'is_read', 'is_deleted', 'is_edited', 'is_reported'
+            'attachment_url', 'is_read', 'is_deleted', 'is_edited', 'is_reported'
         ]
         read_only_fields = ['id', 'timestamp', 'sender', 'message_type']
 
@@ -32,7 +31,6 @@ class MessageSerializer(serializers.ModelSerializer):
             except FileNotFoundError:
                 representation['attachment'] = None
 
-        # attachment_url is handled by get_attachment_url
         return representation
 
     def get_attachment_url(self, instance):
@@ -48,7 +46,6 @@ class MessageSerializer(serializers.ModelSerializer):
             try:
                 file_data = data['attachment']
 
-                # Split mime type and actual base64 data
                 if ',' in file_data:
                     mime_type, file_data = file_data.split(',', 1)
                     data['mime_type'] = mime_type.strip()

@@ -118,22 +118,22 @@ class OrderViewSet(viewsets.ModelViewSet):
                     order.selected_shipping_address = address
                     order.save(update_fields=["selected_shipping_address"])
 
-            # for order in orders:
-            #     # Customer notify
-            #     send_notification_to_user(
-            #         user=request.user,
-            #         message=f"Your order #{order.id} has been created successfully.",
-            #         sender=request.user,
-            #         meta_data={"order_id": order.id, "order_status": "created"}
-            #     )
-            #     # Vendor notify
-            #     if order.vendor:
-            #         send_notification_to_user(
-            #             user=order.vendor,
-            #             message=f"You have received a new order #{order.id}.",
-            #             sender=request.user,
-            #             meta_data={"order_id": order.id, "order_status": "created"}
-            #         )
+            for order in orders:
+                # Customer notify
+                send_notification_to_user(
+                    user=request.user,
+                    message=f"Your order #{order.id} has been created successfully.",
+                    sender=request.user,
+                    meta_data={"order_id": order.id, "order_status": "created"}
+                )
+                # Vendor notify
+                if order.vendor:
+                    send_notification_to_user(
+                        user=order.vendor,
+                        message=f"You have received a new order #{order.id}.",
+                        sender=request.user,
+                        meta_data={"order_id": order.id, "order_status": "created"}
+                    )
 
             return Response(
                 OrderSerializer(orders, many=True, context={"request": request}).data,
