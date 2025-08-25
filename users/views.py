@@ -38,7 +38,7 @@ class UserProfileView(generics.RetrieveAPIView):
 # ----------------------
 # User List for Admin
 # ----------------------
-class UserListView(generics.ListAPIView):
+class UserListView(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAdminUser]
     queryset = User.objects.all()

@@ -11,15 +11,16 @@ from chat.middleware import JWTAuthMiddleware
 from chat.routing import websocket_urlpatterns as chat_ws
 from notification.routing import websocket_urlpatterns as notification_ws
 
+from channels.security.websocket import OriginValidator
+
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
-        "websocket": AllowedHostsOriginValidator(
+        "websocket": OriginValidator(
             JWTAuthMiddleware(
-                URLRouter(
-                    chat_ws + notification_ws
-                )
-            )
+                URLRouter(chat_ws + notification_ws)
+            ),
+            ["https://yourfrontend.com", "http://localhost:5173"]
         ),
     },
 )

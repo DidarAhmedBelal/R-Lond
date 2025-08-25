@@ -5,8 +5,7 @@ from products.models import Product, ProductImage, Promotion
 from common.models import Category, Tag, SEO
 from products.enums import DiscountType
 from django.db.models import Q
-from products.models import ReturnProduct
-from products.models import ReturnProduct
+from products.models import ReturnProduct, ProductSpecifications
 from common.models import ImageUpload
 from users.enums import UserRole
 from orders.models import OrderItem
@@ -54,18 +53,27 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
 
 
+class ProductSpecificationsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductSpecifications
+        fields = [
+            "dimensions",
+            "material",
+            "color",
+            "weight",
+            "assembly_required",
+            "warranty",
+            "care_instructions",
+            "country_of_origin",
+        ]
+
+
+
 class ProductSerializer(serializers.ModelSerializer):
     prod_id = serializers.CharField(read_only=True)
-
-    # HiddenField keeps vendor auto-set when creating product
     vendor = serializers.HiddenField(default=serializers.CurrentUserDefault())
-    
-    # Keep vendor_id for quick reference
     vendor_id = serializers.IntegerField(source="vendor.id", read_only=True)
-
-    # Full vendor details
     vendor_details = UserSerializer(source="vendor", read_only=True)
-
     categories = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Category.objects.all(), required=False
     )
@@ -75,16 +83,15 @@ class ProductSerializer(serializers.ModelSerializer):
     seo = serializers.PrimaryKeyRelatedField(
         queryset=SEO.objects.all(), required=False, allow_null=True
     )
-
-    # Read existing images
     images = ProductImageSerializer(many=True, read_only=True)
-
-    # Accept new images on create/update
     uploaded_images = serializers.ListField(
         child=serializers.ImageField(),
         write_only=True,
         required=False
     )
+    specifications = ProductSpecificationsSerializer(required=False)
+
+
 
     class Meta:
         model = Product
@@ -100,6 +107,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "status", "featured", "is_active",
             "images", "uploaded_images",
             "created_at", "updated_at", "is_approve",
+            'specifications'
         ]
         read_only_fields = [
             "id", "vendor", "vendor_id", "slug", "status", "featured",
@@ -110,6 +118,7 @@ class ProductSerializer(serializers.ModelSerializer):
         categories = validated_data.pop("categories", [])
         tags = validated_data.pop("tags", [])
         uploaded_images = validated_data.pop("uploaded_images", [])
+        specs_data = validated_data.pop("specifications", None)
 
         product = super().create(validated_data)
 
@@ -124,12 +133,17 @@ class ProductSerializer(serializers.ModelSerializer):
             for image in uploaded_images:
                 ProductImage.objects.create(product=product, image=image)
 
+        if specs_data:
+            ProductSpecifications.objects.create(product=product, **specs_data)
+
         return product
-    
+
+
     def update(self, instance, validated_data):
         categories = validated_data.pop("categories", None)
         tags = validated_data.pop("tags", None)
         uploaded_images = validated_data.pop("uploaded_images", [])
+        specs_data = validated_data.pop("specifications", None)
 
         product = super().update(instance, validated_data)
 
@@ -144,11 +158,12 @@ class ProductSerializer(serializers.ModelSerializer):
             for image in uploaded_images:
                 ProductImage.objects.create(product=product, image=image)
 
+        if specs_data:
+            ProductSpecifications.objects.update_or_create(
+                product=product, defaults=specs_data
+            )
+
         return product
-
-
-
-
 
 
 

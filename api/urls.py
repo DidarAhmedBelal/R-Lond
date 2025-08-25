@@ -12,7 +12,8 @@ from users.views import (
     ForgotPasswordRequestView,
     ForgotPasswordConfirmView,
     CustomerListViewSet,
-    VendorListViewSet
+    VendorListViewSet,
+    UserListView
 )
 
 # Products
@@ -103,6 +104,8 @@ router.register("returns/product", ReturnProductViewSet, basename="return-produc
 router.register("seller/applications", SellerApplicationViewSet, basename="seller-application")
 router.register("customers", CustomerListViewSet, basename="customers")
 router.register("vendors", VendorListViewSet, basename="vendors")
+router.register("users", UserListView, basename="user")
+
 
 # Orders & Cart
 router.register("orders", OrderViewSet, basename="order")

@@ -65,6 +65,8 @@ class Product(BaseModel):
     is_active = models.BooleanField(default=True, help_text="General availability toggle")
     is_approve = models.BooleanField(default=False)
 
+
+
     class Meta:
         ordering = ["-created_at"]
         indexes = [
@@ -208,6 +210,21 @@ class Promotion(BaseModel):
         
 
 
+# models.py
+class ProductSpecifications(models.Model):
+    product = models.OneToOneField(Product, on_delete=models.CASCADE, related_name="specifications")
+
+    dimensions = models.CharField(max_length=255, null=True, blank=True)
+    material = models.CharField(max_length=255, null=True, blank=True)
+    color = models.CharField(max_length=100, null=True, blank=True)
+    weight = models.CharField(max_length=100, null=True, blank=True)
+    assembly_required = models.BooleanField(default=False)
+    warranty = models.CharField(max_length=255, null=True, blank=True)
+    care_instructions = models.TextField(null=True, blank=True)
+    country_of_origin = models.CharField(max_length=100, null=True, blank=True)
+
+    def __str__(self):
+        return f"Specs of {self.product.name}"
 
 
 

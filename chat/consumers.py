@@ -6,7 +6,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.core.files.base import ContentFile
 from django.db.models import Q
 from twisted.pair.ip import MAX_SIZE
-from user.models import User as CustomUser
+from users.models import User as CustomUser
 from .models import Message, Chat
 from .serializers import MessageSerializer
 from notification.models import Notification
