@@ -22,7 +22,7 @@ class ImageUploadSerializer(serializers.ModelSerializer):
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ['id', 'name', 'slug', 'description', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'slug', 'image', 'description', 'created_at', 'updated_at']
         read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
 
     def validate_name(self, value):
@@ -32,6 +32,9 @@ class CategorySerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError("Category with this name already exists.")
         return value
+
+
+
 
 
 # -------------------

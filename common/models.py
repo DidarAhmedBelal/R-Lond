@@ -32,10 +32,10 @@ class ImageUpload(models.Model):
 
 
 
-
 class Category(BaseModel):
     name = models.CharField(max_length=255, unique=True)
     slug = models.SlugField(max_length=255, unique=True, blank=True)
+    image = models.ImageField(null=True, blank=True)
     description = models.TextField(blank=True)
 
     class Meta:
@@ -56,6 +56,11 @@ class Category(BaseModel):
                 i += 1
             self.slug = slug
         super().save(*args, **kwargs)
+
+
+
+
+
 
 
 class Tag(BaseModel):

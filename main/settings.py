@@ -216,6 +216,7 @@ TEMPLATES = [
 
 
 WSGI_APPLICATION = 'main.wsgi.application'
+ASGI_APPLICATION = 'main.asgi.application'
 
 
 # Database
@@ -231,16 +232,27 @@ DATABASES = {
 
 
 
+# CHANNEL_LAYERS = {
+#     "default": {
+#         "BACKEND": "channels_redis.core.RedisChannelLayer",
+#         "CONFIG": {
+#             "hosts": [config("REDIS_URL", default="redis://redis:6379/0")],
+#         },
+#     },
+# }
+
+
+
+
+
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [config("REDIS_URL", default="redis://redis:6379/0")],
+            "hosts": [(config('CHANNEL_LAYERS_DEFAULT_HOST'), int(config('CHANNEL_LAYERS_DEFAULT_PORT')))],
         },
     },
 }
-
-
 
 
 # Password validation

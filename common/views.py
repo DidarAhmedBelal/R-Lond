@@ -67,14 +67,42 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 # -------------------
 # Category
 # -------------------
+
+from django.utils.text import slugify
+import uuid
+
+class IsAdminOrVendor(permissions.BasePermission):
+
+    def has_permission(self, request, view):
+        # Read-only actions are allowed for everyone
+        if view.action in ['list', 'retrieve']:
+            return True
+        # Only staff/admin or vendor can create/update/delete
+        user = request.user
+        return user.is_authenticated and (user.is_staff or getattr(user, 'role', None) in ['vendor', 'admin'])
+
+
 class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
-    permission_classes = [IsAdminOrReadOnly]  
+    permission_classes = [IsAdminOrVendor]  
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'description']
     ordering_fields = ['created_at', 'updated_at']
     ordering = ['name']
+
+    def perform_create(self, serializer):
+        if not serializer.validated_data.get('slug'):
+            name = serializer.validated_data.get('name')
+            base_slug = slugify(name) or str(uuid.uuid4())[:8]
+            slug = base_slug
+            i = 1
+            while Category.objects.filter(slug=slug).exists():
+                slug = f"{base_slug}-{i}"
+                i += 1
+            serializer.save(slug=slug)
+        else:
+            serializer.save()
 
 
 # -------------------
